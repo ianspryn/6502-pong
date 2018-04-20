@@ -196,6 +196,10 @@ movepaddle:
 	beq movepaddlerightup
 	cmp #';'
 	beq movepaddlerightdown
+	cmp #'z'
+	beq movepaddleleftup
+	cmp #'t'
+	beq movepaddleleftdown
 	rts
 
 return
