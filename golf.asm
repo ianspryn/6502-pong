@@ -180,7 +180,32 @@ initirv lda #%00001001
 	sta rstvech
 	cli				;Enable interrupts.
 	rts
-
+;IRQ Handler. Invoked by CPU when a byte is ready to be read
+irq	pha    ;Save registers
+	txa
+	pha    ;save all important registers up and down
+	tya
+	pha  
+	lda headptr  ;Get buffer head pointer
+	tax    ;Set index register value
+	sec
+	sbc tailptr
+	and #$1f  ;Buffer is 32 bits long
+	cmp #$1f  ;If tailptr - headptr == -1, buffer is full
+	beq irqout  ;Buffer is full. Can't do anything
+	lda iodata  ;Get the character from the keyboard
+	sta inbuff, x  ;Store it into the buffer
+	inx    ;advance the pointer  
+	txa
+	and #$00011111  ;Clear high 3 bits to make buffer circular
+	sta headptr
+	irqout  pla    ;Restore registers
+	tay
+	pla
+	tax
+	pla
+	cli    ;Enable interrupts
+	rti    ;Return from interrupt handler
 
 
 movepaddle:
