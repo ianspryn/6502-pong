@@ -3,19 +3,18 @@
 ; Instructor:		Dr. Conlon
 ; Date started:		March 20, 2018
 ; Last modification:	March 20, 2018
-; Purpose of program:	Clear screen and keybaord input, move puck and paddles
+; Purpose of program:	Clear screen and keyboard input, move puck and paddles
 
-	.CR 6502             		; Assemble 6502
-	.LI on,toff      		; Listing on, no timings included
-	.TF golf.prg,BIN		; Object filename and format
+	.CR 6502         ; Assemble 6502
+	.LI on,toff      ; Listing on, no timings included
+	.TF golf.prg,BIN	; Object filename and format
 
 ; Define some constants
-;space 	= $20				;ASCII code for space.
-  	.OR	$0000			;Start code at address $0000
+  	.OR	$0000	;Start code at address $0000
 	jmp start
 
 ; Define zero-page storage
-first	= $7000				;Address of upper left (home) on video screen
+first	= $7000		;Address of upper left (home) on video screen
 second 	= first+256
 third	= second+256
 fourth	= third+256
@@ -34,23 +33,21 @@ rstvech	= rstvecl+1
 irqvecl	= $fffe		;IRQ (interrupt request)      vector: fffe-ffff
 irqvech	= irqvecl+1
 inbuff	.BS $20
-;check and  see if the tail is one less than the head, then the buffer is full
 
-delay	.DW $0001
-
+irhlo	.DW irhand	;Store address of IRQ handler for init.
+btimer	.DB 0		;Timer used to move ball slower
 lpaddle	.DB 5
 rpaddle	.DB 5
-
 puckrow	.DB 0		;Used to keep track of the puck's row
 puckcol	.DB 0		;Used to keep track of the puck's column
 puckdir	.DB 4		;Set direction to be initially down and to the right
-;			__________________
-;			\		/
-;			 1	       2
-;
-;			 3	  *    4
-;			/		\
-;			__________________
+;;			__________________
+;;			\		/
+;;			 1	       2
+;;
+;;			 3	  *    4
+;;			/		\
+;;			__________________
 curline	.DW 2		;Used for current line where character is being drawn to
 
 row1	.DW $7000
@@ -101,73 +98,68 @@ start	cld
 .loop4	sta fourth,y
 	iny
 	bne .loop4
-	;jsr inipad	;To be used once we remove it from idle1 in order to initialize it
+	jsr welcome
+	;jsr inipad	;To be used once we remove it from main1 in order to initialize it
 	jsr initirv	;Initialize ACIA and IRQ vectors.
-	jmp idle	;Then idle, waiting for interrupt.
+	jmp main	;Then main, waiting for interrupt.
 
 ;;
-;; Infinite idle loop, waiting for interrupt.
+;;	Infinite main loop, waiting for interrupt.
 ;;
-;Here you would put your main event loop instead of this code.
-;idle and idle1 are used as timers. Change the value of y to increase/decrease time between each run
-;dixed delay for puck, no paddle delay
-	;if it is time, move puck
-;main loop shouldn't ahve thigns that take a lot of time
-idle	ldx #$ff
-	ldy #$28 ;$1F	;28
-idle1	dex
-	bne idle1
-	dey
-	bne idle1
-	jsr drwpuck
+main	jsr drwpuck
 	jsr inipad	;For now, we call this so the puck doesn't overwrite the paddle on the screen
-	jmp getch
-	;Get one character from the buffer, if there's one there.
+;;
+;;	Get one character from the buffer, if there's one there.
+;;
 getch	lda tailptr
-	cmp headptr ;Check pointers.
-	beq empty ;If equal, buffer is empty.
+	cmp headptr	;Check pointers.
+	beq empty	;If equal, buffer is empty.
 	tax
-	lda inbuff,x ;Get the character.
-	;pha ;Char becomes a parameter
-	jsr movepad ;process the character.
-	inc tailptr ;Increment the offset.
+	lda inbuff,x	;Get the character.
+	jsr movepad	;Process the character.
+	inc tailptr	;Increment the offset.
 	lda tailptr
-	and #%00011111 ;Clear high 3 bits to make buffer circular.
+	and #%00011111	;Clear high 3 bits to make buffer circular.
 	sta tailptr
 	jmp getch
-empty	jmp idle
+empty	jmp main
 
 ;;
-;;	IRQ handler
+;;	IRQ handler. Invoked by CPU when a byte is ready to be read
 ;;	This code must precede initirv in assembly-code file.
 ;;
-irhand: pha		;Save register A.
-	lda iobase	;Get the character in the ACIA.
-	pha		;Save character in accumulator
-.echo: 	lda iostat	;Read the ACIA status
-	and #%00010000	;Is the tx register empty?
-	beq .echo	;No, wait for it to empty
-	pla		;Otherwise, load saved character.
-	sta .temp_a
-	jsr movepad	;Push character to stack, and move the paddle in the main loop
-	lda .temp_a
-	sta iobase	;Write to output.
-	cmp #cr		;If CR, automatically insert LF.
-	bne .out
-	lda #lf
+irhand	pha ;Save registers.
+	txa
 	pha
-	jmp .echo
-.temp_a	.DB 0		;Used to solve problem of text being outputted wrong
-.out	pla		;Restore register A.
-	cli		;Enable interrupts.
-	rti		;and return
+	tya
+	pha
+	lda headptr ;Get buffer head pointer.
+	tax ;Set index register value.
+	sec
+	sbc tailptr
+	and #$1f ;Make circular.
+	cmp #$1f ;If headptr - tailptr = 31, buffer is full.
+	beq out ;Buffer is full. Can't do anything.
+	lda iodata ;Get the character from the keyboard.
+	sta inbuff,x ;Store it into the buffer.
+	inx ;Next buffer address.
+	txa
+	and #%00011111 ;Clear high 3 bits to make buffer circular.
+	sta headptr
+out	pla ;Restore registers
+	tay
+	pla
+	tax
+	pla
+	cli ;Clear interrupt mask (un-disable)
+	rti ;Return from interrupt handler.
 
-irhlo	.DW irhand	;Store address of IRQ handler for init.
+
 
 ;;
-;; Intialize interrupt vector.
+;;	Intialize interrupt vector.
 ;;	This code must follow irhand code in assembly-code file.
-
+;;
 initirv lda #%00001001
 	sta iocmd	;Set command status
 	lda #%00011010
@@ -183,32 +175,7 @@ initirv lda #%00001001
 	sta rstvech
 	cli		;Enable interrupts.
 	rts
-;IRQ Handler. Invoked by CPU when a byte is ready to be read
-irq	pha		;Save registers
-	txa
-	pha		;save all important registers up and down
-	tya
-	pha  
-	lda headptr	;Get buffer head pointer
-	tax		;Set index register value
-	sec
-	sbc tailptr
-	and #$1f	;Buffer is 32 bits long
-	cmp #$1f	;If tailptr - headptr == -1, buffer is full
-	beq irqout	;Buffer is full. Can't do anything
-	lda iodata	;Get the character from the keyboard
-	sta inbuff,x	;Store it into the buffer
-	inx		;advance the pointer  
-	txa
-	and #$00011111	;Clear high 3 bits to make buffer circular
-	sta headptr
-irqout  pla		;Restore registers
-	tay
-	pla
-	tax
-	pla
-	cli		;Enable interrupts
-	rti		;Return from interrupt handler
+
 
 
 movepad	cmp #'w'
@@ -393,7 +360,14 @@ inipad:	lda #$F6
 	
 	rts
 
-drwpuck	lda #' '
+drwpuck	inc btimer
+	lda btimer
+	cmp #100
+	beq .skip
+	rts
+.skip	lda #0
+	sta btimer
+	lda #' '
 	pha
 	lda puckrow
         pha
