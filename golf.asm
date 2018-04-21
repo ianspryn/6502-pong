@@ -509,5 +509,5 @@ newpuck:
         pha
         lda puckcol
 	pha
-	jsr prch                   ;Call to draw puckcol
+	jsr prch		;Call to draw puckcol
 	rts
