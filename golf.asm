@@ -103,13 +103,14 @@ start	cld
 .loop4	sta fourth,y
 	iny
 	bne .loop4
-	;jsr welcome
+	jsr welcome
 	;jsr inipad	;To be used once we remove it from main1 in order to initialize it
 	jsr initirv	;Initialize ACIA and IRQ vectors.
 	jmp main	;Then main, waiting for interrupt.
 
 
-;welcome	
+welcome	
+	rts
 
 ;;
 ;;	Infinite main loop, waiting for interrupt.
@@ -212,7 +213,7 @@ clrpad	lda #' '
 drwpad	pha
 	tya		;Transfer left or right paddle position  to a
 	pha		;Push paddle position to stack
-	txa		;Load column (0 or 40) into a
+	txa		;Load column (0 or 39) into a
 	pha
 	jsr prch
 	rts
@@ -317,7 +318,7 @@ rtch	pla
 	sta curline
 	lda row1+1,x
 	sta curline+1
-	lda (curline),y	;y is the column number, and we don't need to double it because it's 1 byte per column
+	lda (curline),y	;Load into a the value stored at passed in parameters
 	pha
 	
 	;restore pointer return adress to stack
