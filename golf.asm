@@ -36,8 +36,8 @@ inbuff	.BS $20
 
 irhlo	.DW irhand	;Store address of IRQ handler for init.
 btimer	.DB 0		;Timer used to move ball slower
-player1	.DB 0		;Player1's (left) score
-player2	.DB 0		;Player2's (right) score
+player1	.DB 0		;player1's (left) score
+player2	.DB 0		;player2's (right) score
 lpaddle	.DB 5
 rpaddle	.DB 5
 puckrow	.DB 0		;Used to keep track of the puck's row
@@ -416,39 +416,40 @@ drwpuck	inc btimer
 	cmp #4
 	beq move4
 	
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;dec puckcol ETC
-;TODO add 2, 4, 6, 8
-;Branches to score if there is no collision, returns to subroutine otherwise
-clsn	lda paddlerow
+;;
+;;Collision
+;;Branches to score if there is no collision, returns to subroutine otherwise
+;;
+collide	lda puckrow
 	pha
-	lda paddlecol
+	lda puckcol
 	pha
-	jsr rtch			;returns character at that space
-	pla
-	cmp #$f6
-	beq score
-	rts
-;increments either player1's score or player2's score, and redraws them
-score	pla
-	cmp player1
-	beq .p1score
-	jmp .p2score
-.p1score
-	inc player1
-	;;TODO: draw new p1score
+	jsr rtch	;Returns character at that space
+	pla		;Pull the character returned from rtch
+	cmp #$f6	;Did we hit a paddle?
+	beq score	;If no paddle was hit, then increment appropriate score and reset game
+	rts		;If a paddle was hit, then continue gameplay
+;;
+;;Increments either player1's score or player2's score, and redraws the scores
+;;
+score	lda puckcol
+	cmp #1
+	beq .p1sc
+	jmp .p2sc
+.p1sc	inc player1
+	;;TODO: draw new p1sc
 	jmp restart
-.p2score
-	inc player2
-	;;TODO: draw new p2score
+.p2sc	inc player2
+	;;TODO: draw new p2sc
 	jmp restart
 	
 ;Resets the position of the puck to the middle, it's direction to 1, and jumps to idle	
-restart:
-	lda #19
+restart	lda #19
 	sta puckcol
 	lda #13
 	sta puckrow
-	puckdir = 1
+	lda #1
+	sta puckdir
 	jmp idle
 ;;
 ;;puckcol--
@@ -460,7 +461,7 @@ move1	ldx puckcol
 	bpl .move11
 	lda player1
 	pha
-	jsr clsn
+	jsr collide
 	inc puckdir
 	jmp move2	;if at left wall, start moving in direction 2
 .move11	lda puckrow 
@@ -482,7 +483,7 @@ move2	ldx puckcol
 	bmi .move21
 	lda player2
 	pha
-	jsr clsn
+	jsr collide
 	dec puckdir
 	jmp move1	;if at right wall, start moving in direction 1
 .move21	lda puckrow
@@ -504,7 +505,7 @@ move3	ldx puckcol
 	bpl .move31
 	lda player1
 	pha
-	jsr clsn
+	jsr collide
 	inc puckdir
 	jmp move4	;if at left wall, start moving in direction 4
 .move31	lda puckrow
@@ -526,7 +527,7 @@ move4	ldx puckcol
 	bmi .move41
 	lda player2
 	pha
-	jsr clsn
+	jsr collide
 	dec puckdir
 	jmp move3	;if at right wall, start moving in direction 3
 .move41	lda puckrow
