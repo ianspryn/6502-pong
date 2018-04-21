@@ -36,8 +36,10 @@ irqvech	= irqvecl+1
 inbuff	.BS $20
 ;check and  see if the tail is one less than the head, then the buffer is full
 
-lpaddle		.DB 5
-rpaddle		.DB 5
+delay	.DW $0001
+
+lpaddle	.DB 5
+rpaddle	.DB 5
 
 puckrow	.DB 0		;Used to keep track of the puck's row
 puckcol	.DB 0		;Used to keep track of the puck's column
@@ -117,12 +119,9 @@ idle1	dex
 	bne idle1
 	dey
 	bne idle1
-
-
-
-
 	jsr drwpuck
 	jsr inipad	;For now, we call this so the puck doesn't overwrite the paddle on the screen
+	jmp getch
 	;Get one character from the buffer, if there's one there.
 getch	lda tailptr
 	cmp headptr ;Check pointers.
@@ -137,7 +136,6 @@ getch	lda tailptr
 	sta tailptr
 	jmp getch
 empty	jmp idle
-	jmp idle
 
 ;;
 ;;	IRQ handler
