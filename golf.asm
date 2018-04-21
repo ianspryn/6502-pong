@@ -415,47 +415,7 @@ drwpuck	inc btimer
 	beq move3
 	cmp #4
 	beq move4
-	
-;;
-;;Collision
-;;Branches to score if there is no collision, returns to subroutine otherwise
-;;
-collide	lda puckrow
-	pha
-	lda puckcol
-	pha
-	jsr rtch	;Returns character at that space
-	pla		;Pull the character returned from rtch
-	cmp #$f6	;Did we hit a paddle?
-	beq score	;If no paddle was hit, then increment appropriate score and reset game
-	rts		;If a paddle was hit, then continue gameplay
-;;
-;;Increments either player1's score or player2's score, and redraws the scores
-;;
-score	lda puckcol
-	cmp #1
-	beq .p1sc
-	jmp .p2sc
-.p1sc	inc player1
-	;;TODO: draw new p1sc
-	jmp restart
-.p2sc	inc player2
-	;;TODO: draw new p2sc
-	jmp restart
-	
-;Resets the position of the puck to the middle, it's direction to 1, and jumps to idle	
-restart	lda #19
-	sta puckcol
-	lda #13
-	sta puckrow
-	lda #1
-	sta puckdir
-	jmp idle
-;;
-;;puckcol--
-;;puckrow--
-;;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
-;;
+
 move1	ldx puckcol
 	cpx #1
 	bpl .move11
@@ -548,3 +508,44 @@ newpuck	lda #'*'
 	pha
 	jsr prch		;Call to draw puckcol
 	rts
+	
+;;
+;;Collision
+;;Branches to score if there is no collision, returns to subroutine otherwise
+;;
+collide	lda puckrow
+	pha
+	lda puckcol
+	pha
+	jsr rtch	;Returns character at that space
+	pla		;Pull the character returned from rtch
+	cmp #$f6	;Did we hit a paddle?
+	beq score	;If no paddle was hit, then increment appropriate score and reset game
+	rts		;If a paddle was hit, then continue gameplay
+;;
+;;Increments either player1's score or player2's score, and redraws the scores
+;;
+score	lda puckcol
+	cmp #1
+	beq .p1sc
+	jmp .p2sc
+.p1sc	inc player1
+	;;TODO: draw new p1sc
+	jmp restart
+.p2sc	inc player2
+	;;TODO: draw new p2sc
+	jmp restart
+	
+;Resets the position of the puck to the middle, it's direction to 1, and jumps to main	
+restart	lda #19
+	sta puckcol
+	lda #13
+	sta puckrow
+	lda #1
+	sta puckdir
+	jmp main
+;;
+;;puckcol--
+;;puckrow--
+;;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
+;;
