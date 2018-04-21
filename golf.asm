@@ -419,19 +419,17 @@ drwpuck	inc btimer
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;dec puckcol ETC
 ;TODO add 2, 4, 6, 8
 ;Branches to score if there is no collision, returns to subroutine otherwise
-collision:
-	lda	paddlerow
+clsn	lda paddlerow
 	pha
-	lda	paddlecol
+	lda paddlecol
 	pha
-	jsr	rtch			;returns character at that space
+	jsr rtch			;returns character at that space
 	pla
-	cmp	#$f6
-	beq	score
+	cmp #$f6
+	beq score
 	rts
 ;increments either player1's score or player2's score, and redraws them
-score:	
-	pla
+score	pla
 	cmp player1
 	beq .p1score
 	jmp .p2score
@@ -452,109 +450,96 @@ restart:
 	sta puckrow
 	puckdir = 1
 	jmp idle
-
-move1:
-;puckcol--
-;puckrow--
-;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
-	ldx puckcol
+;;
+;;puckcol--
+;;puckrow--
+;;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
+;;
+move1	ldx puckcol
 	cpx #1
+	bpl .move11
 	lda player1
 	pha
-	bpl .move11
-	jsr collision
+	jsr clsn
 	inc puckdir
-	jmp move2
-.move11
-;if we hit the top side of the wall, jump to move3 to move the ball down and to the left
-	lda puckrow
+	jmp move2	;if at left wall, start moving in direction 2
+.move11	lda puckrow 
 	cmp #1
 	bpl .move12
 	inc puckdir
 	inc puckdir
-	jmp move3
-.move12
-	dec puckcol
+	jmp move3	;if at ceiling, start moving in direction 3
+.move12	dec puckcol
 	dec puckrow
 	jmp newpuck
-
-move2:
-;puckcol++
-;puckrow--
-;if we hit the right side of the wall, jump to move1 to move the ball up and to the left
-	ldx puckcol
+;;
+;;puckcol++
+;;puckrow--
+;;if we hit the right side of the wall, jump to move1 to move the ball up and to the left
+;;
+move2	ldx puckcol
 	cpx #39
 	bmi .move21
 	lda player2
 	pha
-	jsr collision
+	jsr clsn
 	dec puckdir
-	jmp move1
-.move21
-;if we hit the top side of the wall, jump to move4 to move the ball down and to the right
-	lda puckrow
+	jmp move1	;if at right wall, start moving in direction 1
+.move21	lda puckrow
 	cmp #1
 	bpl .move22
 	inc puckdir
 	inc puckdir
-	jmp move4
-.move22	
-	inc puckcol
+	jmp move4	;if at ceiling, start moving in direction 4
+.move22	inc puckcol
 	dec puckrow
 	jmp newpuck
-
-move3:
-;puckcol--
-;puckrow++
-;if we hit the right side of the wall, jump to move4 to move the ball down and to the right
-	ldx puckcol
+;;
+;;puckcol--
+;;puckrow++
+;;if we hit the right side of the wall, jump to move4 to move the ball down and to the right
+;;
+move3	ldx puckcol
 	cpx #1
 	bpl .move31
 	lda player1
 	pha
-	jsr collision
+	jsr clsn
 	inc puckdir
-	jmp move4
-.move31
-;if we hit the bottom side of the wall, jump to move1 to move the ball up and to the left
-	lda puckrow
+	jmp move4	;if at left wall, start moving in direction 4
+.move31	lda puckrow
 	cmp #24
 	bmi .move32
 	dec puckdir
 	dec puckdir
-	jmp move1
-.move32
-	dec puckcol
+	jmp move1	;if at floor, start moving in direction 1
+.move32	dec puckcol
 	inc puckrow
 	jmp newpuck
-
-move4:
-;puckcol++
-;puckrow++
-;if we hit the right side of the wall, jump to move3 to move the ball down and to the left
-	ldx puckcol
+;;
+;;puckcol++
+;;puckrow++
+;;if we hit the right side of the wall, jump to move3 to move the ball down and to the left
+;;
+move4	ldx puckcol
 	cpx #39
 	bmi .move41
 	lda player2
 	pha
-	jsr collision
+	jsr clsn
 	dec puckdir
-	jmp move3
-.move41
-;if we hit the bottom side of the wall, jump to move2 to move the ball up and to the right
-	lda puckrow
+	jmp move3	;if at right wall, start moving in direction 3
+.move41	lda puckrow
 	cmp #24
 	bmi .move42
 	dec puckdir
 	dec puckdir
-	jmp move2	
-.move42
-	inc puckcol
+	jmp move2	;if at floor, start moving in direction 2
+.move42	inc puckcol
 	inc puckrow
 	jmp newpuck
 
-newpuck:
-	lda #'*'
+newpuck	lda #'*'
 	pha
 	lda puckrow
         pha
