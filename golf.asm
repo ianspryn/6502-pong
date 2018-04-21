@@ -36,6 +36,8 @@ inbuff	.BS $20
 
 irhlo	.DW irhand	;Store address of IRQ handler for init.
 btimer	.DB 0		;Timer used to move ball slower
+player1	.DB 0		;Player1's (left) score
+player2	.DB 0		;Player2's (right) score
 lpaddle	.DB 5
 rpaddle	.DB 5
 puckrow	.DB 0		;Used to keep track of the puck's row
@@ -415,6 +417,40 @@ drwpuck	inc btimer
 	
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;dec puckcol ETC
 ;TODO add 2, 4, 6, 8
+;Branches to score if there is no collision, returns to subroutine otherwise
+collision:
+	lda	paddlerow
+	pha
+	lda	paddlecol
+	pha
+	jsr	rtch			;returns character at that space
+	pla
+	cmp	#$f6
+	beq	score
+	rts
+;increments either player1's score or player2's score, and redraws them
+score:	
+	pla
+	cmp player1
+	beq .p1score
+	jmp .p2score
+.p1score
+	inc player1
+	;;TODO: draw new p1score
+	jmp restart
+.p2score
+	inc player2
+	;;TODO: draw new p2score
+	jmp restart
+	
+;Resets the position of the puck to the middle, it's direction to 1, and jumps to idle	
+restart:
+	lda #19
+	sta puckcol
+	lda #13
+	sta puckrow
+	puckdir = 1
+	jmp idle
 
 move1:
 ;puckcol--
@@ -422,7 +458,10 @@ move1:
 ;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
 	ldx puckcol
 	cpx #1
+	lda player1
+	pha
 	bpl .move11
+	jsr collision
 	inc puckdir
 	jmp move2
 .move11
@@ -445,6 +484,9 @@ move2:
 	ldx puckcol
 	cpx #39
 	bmi .move21
+	lda player2
+	pha
+	jsr collision
 	dec puckdir
 	jmp move1
 .move21
@@ -467,6 +509,9 @@ move3:
 	ldx puckcol
 	cpx #1
 	bpl .move31
+	lda player1
+	pha
+	jsr collision
 	inc puckdir
 	jmp move4
 .move31
@@ -489,6 +534,9 @@ move4:
 	ldx puckcol
 	cpx #39
 	bmi .move41
+	lda player2
+	pha
+	jsr collision
 	dec puckdir
 	jmp move3
 .move41
