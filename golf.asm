@@ -76,14 +76,17 @@ row23	.DW $7370
 row24	.DW $7398
 row25	.DW $73C0
 
+msg1	.AZ "Welcome! Press 'w' or 's' to move the left paddle, and 'p' or ';' to move the'"
+
 	.BS $20		;32-byte circular input buffer
 headptr .DB 0		;Initialize buffer offsets to zero
 tailptr .DB 0					
 
 	.BS $0300-*	;New origin. Skip to beginning of program, proper.
 
-
-
+;;
+;;Clear the screen
+;;
 start	cld
 	lda #' '
 .loop1	sta first,y
@@ -98,10 +101,13 @@ start	cld
 .loop4	sta fourth,y
 	iny
 	bne .loop4
-	jsr welcome
+	;jsr welcome
 	;jsr inipad	;To be used once we remove it from main1 in order to initialize it
 	jsr initirv	;Initialize ACIA and IRQ vectors.
 	jmp main	;Then main, waiting for interrupt.
+
+
+;welcome	
 
 ;;
 ;;	Infinite main loop, waiting for interrupt.
@@ -268,14 +274,14 @@ rpaddn	ldy rpaddle	;Load the current position of the right paddle
 prch:
 	;pull off pointer return address from stack=
 	pla
-	sta .pcretad	;Pointer return address
+	sta .adrs	;Pointer return address
 	pla
-	sta .pcretad+1
+	sta .adrs+1
 	pla		;Get column, because it's the last thing we pushed
 	tay		;Save column
 	pla		;Get row
 	asl		;Double it by shifting to the left 1 (which multiples by 2)
-	tax		;Saave row
+	tax		;Save row
 	lda row1,x
 	sta curline
 	lda row1+1,x
@@ -284,20 +290,42 @@ prch:
 	sta (curline),y	;y is the column number, and we don't need to double it because it's 1 byte per column
 
 	;restore pointer return adress to stack
-	lda .pcretad+1
+	lda .adrs+1
 	pha
-	lda .pcretad
+	lda .adrs
 	pha
-	clc
 
 	rts
-.pcretad	.DW $0000		;pointer return address
+.adrs	.DW $0000		;pointer return address
 
-
-;rtch:	;return char
+;return char
 ;return what is in that space
 ;if the place that doesn't have a space, then the puc should not be placed therea nd soemthing else shoudl happen
+rtch	pla
+	sta .adrs	;Pointer return address
+	pla
+	sta .adrs+1
 
+	pla		;Get column, because it's the last thing we pushed
+	tay		;Save column
+	pla		;Get row
+	asl		;Double it by shifting to the left 1 (which multiples by 2)
+	tax		;Save row
+	lda row1,x
+	sta curline
+	lda row1+1,x
+	sta curline+1
+	lda (curline),y	;y is the column number, and we don't need to double it because it's 1 byte per column
+	pha
+	
+	;restore pointer return adress to stack
+	lda .adrs+1
+	pha
+	lda .adrs
+	pha
+
+	rts
+.adrs	.DW $0000		;pointer return address
 
 ;Initialize paddles
 inipad:	lda #$F6
@@ -312,7 +340,7 @@ inipad:	lda #$F6
 	pha
 	lda lpaddle
 	clc
-	adc #$1
+	adc #1
 	pha
 	lda #0
 	pha
@@ -322,7 +350,7 @@ inipad:	lda #$F6
 	pha
 	lda lpaddle
 	clc
-	adc #$2
+	adc #2
 	pha
 	lda #0
 	pha
@@ -330,7 +358,7 @@ inipad:	lda #$F6
 	
 
 
-	lda #$F5
+	lda #$F6
 	pha
 	lda rpaddle
 	pha
@@ -338,21 +366,21 @@ inipad:	lda #$F6
 	pha
 	jsr prch
 
-	lda #$F5
+	lda #$F6
 	pha
 	lda rpaddle
 	clc
-	adc #$1
+	adc #1
 	pha
 	lda #39
 	pha
 	jsr prch
 
-	lda #$F5
+	lda #$F6
 	pha
 	lda rpaddle
 	clc
-	adc #$2
+	adc #2
 	pha
 	lda #39
 	pha
