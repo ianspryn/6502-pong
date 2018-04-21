@@ -1,4 +1,4 @@
-; Name:			Ian Spryn and Nathaniel Specher
+; Name:			Ian Spryn and Nathaniel Sprecher
 ; Course:		COMP 252
 ; Instructor:		Dr. Conlon
 ; Date started:		March 20, 2018
@@ -20,38 +20,36 @@ second 	= first+256
 third	= second+256
 fourth	= third+256
 
-cr	= $0d				;Carriage-return character
-lf	= $0a				;Line-feed (newline) character
+cr	= $0d		;Carriage-return character
+lf	= $0a		;Line-feed (newline) character
 iobase	= $8800
+iodata	= iobase
 iostat	= iobase+1
 iocmd	= iobase+2
 ioctrl	= iobase+3
-nmivecl	= $fffa				;NMI (non-maskable interrupt) vector: fffa-fffb
+nmivecl	= $fffa		;NMI (non-maskable interrupt) vector: fffa-fffb
 nmivech	= nmivecl+1
-rstvecl	= $fffc				;RES (reset) vector:                  fffc-fffd
+rstvecl	= $fffc		;RES (reset) vector:                  fffc-fffd
 rstvech	= rstvecl+1
-irqvecl	= $fffe				;IRQ (interrupt request)      vector: fffe-ffff
+irqvecl	= $fffe		;IRQ (interrupt request)      vector: fffe-ffff
 irqvech	= irqvecl+1
-inbuff	.BS $20	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+inbuff	.BS $20
 ;check and  see if the tail is one less than the head, then the buffer is full
 
+lpaddle		.DB 5
+rpaddle		.DB 5
 
-
-left_paddle		.DB 5
-right_paddle		.DB 5
-
-puckrow	.DB 0
-puckcolumn	.DB 0
-puckdir	.DB 4				;Set direction to be initially down and to the right
-;					__________________
-;					\		/
-;					 1	       2
+puckrow	.DB 0		;Used to keep track of the puck's row
+puckcol	.DB 0		;Used to keep track of the puck's column
+puckdir	.DB 4		;Set direction to be initially down and to the right
+;			__________________
+;			\		/
+;			 1	       2
 ;
-;					 3	       4
-;					/		\
-;					__________________
-curline	.DW 2
-
+;			 3	  *    4
+;			/		\
+;			__________________
+curline	.DW 2		;Used for current line where character is being drawn to
 
 row1	.DW $7000
 row2	.DW $7028
@@ -79,39 +77,31 @@ row23	.DW $7370
 row24	.DW $7398
 row25	.DW $73C0
 
+	.BS $20		;32-byte circular input buffer
+headptr .DB 0		;Initialize buffer offsets to zero
+tailptr .DB 0					
 
-
-	.BS $20 ;32-byte circular input buffer
-;headptr .DB 0 ;Initialize buffer offsets to zero					;;;;;;;;;;;;;NEW
-;tailptr .DB 0										;;;;;;;;;;;;;NEW
-
-	.BS $0300-*
-	;.NO	$0300			;New origin. Skip to beginning of program, proper.
+	.BS $0300-*	;New origin. Skip to beginning of program, proper.
 
 
 
-start
-	cld
+start	cld
 	lda #' '
-.loop1
-	sta first,y
+.loop1	sta first,y
 	iny
 	bne .loop1
-.loop2
-	sta second,y
+.loop2	sta second,y
 	iny
 	bne .loop2
-.loop3
-	sta third,y
+.loop3	sta third,y
 	iny
 	bne .loop3
-.loop4
-	sta fourth,y
+.loop4	sta fourth,y
 	iny
 	bne .loop4
-	;jsr drawpaddle			;To be used once we remove it from idle1 in order to initialize it
-	jsr initirv			;Initialize ACIA and IRQ vectors.
-	jmp idle			;Then idle, waiting for interrupt.
+	;jsr inipad	;To be used once we remove it from idle1 in order to initialize it
+	jsr initirv	;Initialize ACIA and IRQ vectors.
+	jmp idle	;Then idle, waiting for interrupt.
 
 ;;
 ;; Infinite idle loop, waiting for interrupt.
@@ -121,114 +111,122 @@ start
 ;dixed delay for puck, no paddle delay
 	;if it is time, move puck
 ;main loop shouldn't ahve thigns that take a lot of time
-idle:
-	ldx #$ff
+idle	ldx #$ff
 	ldy #$28 ;$1F	;28
-.idle1	dex
-	bne .idle1
+idle1	dex
+	bne idle1
 	dey
-	bne .idle1
-	jsr drawpuck
-	jsr drawpaddle			;For now, we call this so the puck doesn't overwrite the paddle on the screen
+	bne idle1
+
+
+
+
+	jsr drwpuck
+	jsr inipad	;For now, we call this so the puck doesn't overwrite the paddle on the screen
+	;Get one character from the buffer, if there's one there.
+getch	lda tailptr
+	cmp headptr ;Check pointers.
+	beq empty ;If equal, buffer is empty.
+	tax
+	lda inbuff,x ;Get the character.
+	;pha ;Char becomes a parameter
+	jsr movepad ;process the character.
+	inc tailptr ;Increment the offset.
+	lda tailptr
+	and #%00011111 ;Clear high 3 bits to make buffer circular.
+	sta tailptr
+	jmp getch
+empty	jmp idle
 	jmp idle
 
 ;;
 ;;	IRQ handler
 ;;	This code must precede initirv in assembly-code file.
 ;;
-irhand: pha				;Save register A.
-;Save register A.
-	lda iobase			;Get the character in the ACIA.
-	pha				;Save character in accumulator
-.echo: 	lda iostat			;Read the ACIA status
-	and #%00010000			;Is the tx register empty?
-	beq .echo			;No, wait for it to empty
-	pla				;Otherwise, load saved character.
+irhand: pha		;Save register A.
+	lda iobase	;Get the character in the ACIA.
+	pha		;Save character in accumulator
+.echo: 	lda iostat	;Read the ACIA status
+	and #%00010000	;Is the tx register empty?
+	beq .echo	;No, wait for it to empty
+	pla		;Otherwise, load saved character.
 	sta .temp_a
-	jsr movepaddle			;Push character to stack, and move the paddle in the main loop
+	jsr movepad	;Push character to stack, and move the paddle in the main loop
 	lda .temp_a
-	sta iobase			;Write to output.
-	cmp #cr				;If CR, automatically insert LF.
+	sta iobase	;Write to output.
+	cmp #cr		;If CR, automatically insert LF.
 	bne .out
 	lda #lf
 	pha
 	jmp .echo
-.temp_a	.DB 0				;Used to solve problem of text being outputted wrong
-.out
-	pla				;Restore register A.
-	cli				;Enable interrupts.
-	rti				;and return
+.temp_a	.DB 0		;Used to solve problem of text being outputted wrong
+.out	pla		;Restore register A.
+	cli		;Enable interrupts.
+	rti		;and return
 
 irhlo	.DW irhand	;Store address of IRQ handler for init.
 
 ;;
 ;; Intialize interrupt vector.
 ;;	This code must follow irhand code in assembly-code file.
-;;
+
 initirv lda #%00001001
-	sta iocmd			;Set command status
+	sta iocmd	;Set command status
 	lda #%00011010
-	sta ioctrl			;0 stop bits, 8 bit word, 9600 bps
-	lda irhlo			;Get low-byte addr of interrupt handler.
-	sta irqvecl			;Store in IRQ and NMI vectors.
+	sta ioctrl	;0 stop bits, 8 bit word, 9600 bps
+	lda irhlo	;Get low-byte addr of interrupt handler.
+	sta irqvecl	;Store in IRQ and NMI vectors.
 	sta nmivecl
-	lda irhlo+1			;Get high-byte addr of interrupt handler.
-	sta irqvech			;Store it in IRQ and NMI vectors.
+	lda irhlo+1	;Get high-byte addr of interrupt handler.
+	sta irqvech	;Store it in IRQ and NMI vectors.
 	sta nmivech
-	lda #$00			;Initialize reset vector.
-	sta rstvecl			;Store it in reset vector.
+	lda #$00	;Initialize reset vector.
+	sta rstvecl	;Store it in reset vector.
 	sta rstvech
-	cli				;Enable interrupts.
+	cli		;Enable interrupts.
 	rts
 ;IRQ Handler. Invoked by CPU when a byte is ready to be read
-irq	pha    ;Save registers
+irq	pha		;Save registers
 	txa
-	pha    ;save all important registers up and down
+	pha		;save all important registers up and down
 	tya
 	pha  
-	lda headptr  ;Get buffer head pointer
-	tax    ;Set index register value
+	lda headptr	;Get buffer head pointer
+	tax		;Set index register value
 	sec
 	sbc tailptr
-	and #$1f  ;Buffer is 32 bits long
-	cmp #$1f  ;If tailptr - headptr == -1, buffer is full
-	beq irqout  ;Buffer is full. Can't do anything
-	lda iodata  ;Get the character from the keyboard
-	sta inbuff, x  ;Store it into the buffer
-	inx    ;advance the pointer  
+	and #$1f	;Buffer is 32 bits long
+	cmp #$1f	;If tailptr - headptr == -1, buffer is full
+	beq irqout	;Buffer is full. Can't do anything
+	lda iodata	;Get the character from the keyboard
+	sta inbuff,x	;Store it into the buffer
+	inx		;advance the pointer  
 	txa
-	and #$00011111  ;Clear high 3 bits to make buffer circular
+	and #$00011111	;Clear high 3 bits to make buffer circular
 	sta headptr
-	irqout  pla    ;Restore registers
+irqout  pla		;Restore registers
 	tay
 	pla
 	tax
 	pla
-	cli    ;Enable interrupts
-	rti    ;Return from interrupt handler
+	cli		;Enable interrupts
+	rti		;Return from interrupt handler
 
 
-movepaddle:
-;'w' is to move the left paddle up
-;'s' is to love the left paddle down
-;'p' is to move the right paddle up
-;';' is to move the right paddle down
-	cmp #'w'
-	beq movepaddleleftup
+movepad	cmp #'w'
+	beq lpadup	;Move left paddle up
 	cmp #'s'
-	beq movepaddleleftdown
+	beq lpaddn	;Move left paddle down
 	cmp #'p'
-	beq movepaddlerightup
+	beq rpadup	;Move right paddle up
 	cmp #';'
-	beq movepaddlerightdown
+	beq rpaddn	;Move right paddle down
 	rts
 
-return
-        rts
+return	rts
 
 ;Delete either top or bottom of paddle in preparation of drawing next phase of new paddle position
-clearoldpaddle
-	lda #' '
+clrpad	lda #' '
         pha
         tya             ;Transfer paddle position to a
         pha
@@ -237,132 +235,127 @@ clearoldpaddle
         jsr prch
         rts
 
-;Draw a new character 
-drawnewpaddle
-	pha
-	tya				;transfer left or right paddle position  to a
-	pha				;push paddle position to stack
-	txa				;Load column (0 or 40) into a
+;Draw a new part of a paddle
+drwpad	pha
+	tya		;Transfer left or right paddle position  to a
+	pha		;Push paddle position to stack
+	txa		;Load column (0 or 40) into a
 	pha
 	jsr prch
 	rts
 
-movepaddleleftup
-        clc				;Prevents overflow
-        ldy left_paddle
-	cpy #1				;Are we at the top? If so, don't move any higher
-	bmi return
+lpadup	ldy lpaddle	;Load the current position of the left paddle
+	cpy #1		;Are we at the top? If so, don't move any higher
+	bmi return	;if we are at the top, then rts
 	iny
-	iny				;Move to bottom of paddle
-	ldx #0				;Load column number into x
-        jsr clearoldpaddle
-	dec left_paddle
-	ldy left_paddle			;Reset y to the initial location of the original paddle
-	lda #$F6
-	jsr drawnewpaddle
+	iny		;Move position of y to bottom of paddle
+	ldx #0		;Load column number into x
+        jsr clrpad	;Clear the bottom part of the paddle
+	dec lpaddle	;Move pointer of paddle position up
+	ldy lpaddle	;Reset y to the new location of the paddle
+	lda #$F6	;Character for left paddle
+	ldx #0
+	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
-movepaddleleftdown
-	clc
-	ldy left_paddle
-	cpy #22
-	bpl return
-	ldx #0				;Load column number into x
-	jsr clearoldpaddle
-	inc left_paddle
-	ldy left_paddle
+lpaddn	ldy lpaddle	;Load the current position of the left paddle
+	cpy #22		;Are we at the bottom? If so, don't go any lower
+	bpl return	;If we are at the bottom, then rts
+	ldx #0		;Load column number into x
+	jsr clrpad	;Clear the top part of the paddle
+	inc lpaddle	;Move pointer of the paddle position down
+	ldy lpaddle	;Reset y to the new location of the paddle
 	iny
-	iny
-	lda #$F6
-	jsr drawnewpaddle
+	iny		;Move position of y to bottom of paddle
+	lda #$F6	;Character for left paddle
+	ldx #0
+	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 
-movepaddlerightup
-        clc				;Prevents overflow
-        ldy right_paddle
-	cpy #1				;Are we at the top? If so, don't move any higher
-	bmi return
+rpadup	ldy rpaddle	;Load the current position of the right paddle
+	cpy #1		;Are we at the top? If so, don't move any higher
+	bmi return	;If we are the top, then rts
 	iny
-	iny				;Move to bottom of paddle
-	ldx #39				;Load column number into x
-        jsr clearoldpaddle
-	dec right_paddle
-	ldy right_paddle		;Reset y to the initial location of the original paddle
-	lda #$F5
-	jsr drawnewpaddle
+	iny		;Move position of y to bottom of paddle
+	ldx #39		;Load column number into x
+        jsr clrpad	;Clear the bottom part of the paddle
+	dec rpaddle	;Move pointer of paddle position up
+	ldy rpaddle	;Reset y to the new location of the paddle
+	lda #$F5	;Character for right paddle
+	ldx #39
+	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
-movepaddlerightdown
-	clc
-	ldy right_paddle
-	cpy #22
-	bpl return
-	ldx #39				;Load column number into x
-	jsr clearoldpaddle
-	inc right_paddle
-	ldy right_paddle
+rpaddn	ldy rpaddle	;Load the current position of the right paddle
+	cpy #22		;Are we at the bottom? If so, don't go any lower
+	bpl return	;If we are at the bottom, then rts
+	ldx #39		;Load column number into x
+	jsr clrpad	;Clear the top part of the paddle
+	inc rpaddle	;Move pointer of the paddle position down
+	ldy rpaddle	;Reset y to the new location of the paddle
 	iny
-	iny
-	lda #$F5
-	jsr drawnewpaddle
+	iny		;Move position of y to bottom of paddle
+	lda #$F5	;Character for left paddle
+	ldx #39
+	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 		
 prch:
-	;pull off pointer return address from stack
-	stx .tempx
+	;pull off pointer return address from stack=
 	pla
-	sta .pcretad           		;pointer return address
+	sta .pcretad	;Pointer return address
 	pla
 	sta .pcretad+1
-	pla                           	;get column, because it's the last thing we pushed
-	tay                           	;save column
-	pla                           	;get row
-	asl				;double it by shifting to the left 1 (which multiples by 2)
-	tax             		;save row
-	;get address of row
+	pla		;Get column, because it's the last thing we pushed
+	tay		;Save column
+	pla		;Get row
+	asl		;Double it by shifting to the left 1 (which multiples by 2)
+	tax		;Saave row
 	lda row1,x
 	sta curline
 	lda row1+1,x
 	sta curline+1
-	pla				;get character ('*' or ' ')
-	sta (curline),y			;y is the column number, and we don't need to double it because it's 1 byte per column
+	pla		;Get character ('*' or ' ', for example)
+	sta (curline),y	;y is the column number, and we don't need to double it because it's 1 byte per column
 
-	;restore poiter return adress to stack
+	;restore pointer return adress to stack
 	lda .pcretad+1
 	pha
 	lda .pcretad
 	pha
 	clc
-	ldx .tempx
+
 	rts
 .pcretad	.DW $0000		;pointer return address
-.tempx	.DB 0
+
 
 ;rtch:	;return char
 ;return what is in that space
 ;if the place that doesn't have a space, then the puc should not be placed therea nd soemthing else shoudl happen
 
 
-drawpaddle:
-	lda #$F6
+;Initialize paddles
+inipad:	lda #$F6
 	pha
-	lda left_paddle
+	lda lpaddle
 	pha
 	lda #0
 	pha
 	jsr prch
+
 	lda #$F6
 	pha
-	lda left_paddle
+	lda lpaddle
 	clc
 	adc #$1
 	pha
 	lda #0
 	pha
 	jsr prch
+
 	lda #$F6
 	pha
-	lda left_paddle
+	lda lpaddle
 	clc
 	adc #$2
 	pha
@@ -370,25 +363,29 @@ drawpaddle:
 	pha
 	jsr prch
 	
+
+
 	lda #$F5
 	pha
-	lda right_paddle
+	lda rpaddle
 	pha
 	lda #39
 	pha
 	jsr prch
+
 	lda #$F5
 	pha
-	lda right_paddle
+	lda rpaddle
 	clc
 	adc #$1
 	pha
 	lda #39
 	pha
 	jsr prch
+
 	lda #$F5
 	pha
-	lda right_paddle
+	lda rpaddle
 	clc
 	adc #$2
 	pha
@@ -398,15 +395,14 @@ drawpaddle:
 	
 	rts
 
-drawpuck:
-	lda #' '
+drwpuck	lda #' '
 	pha
 	lda puckrow
         pha
-        lda puckcolumn
+        lda puckcol
 	pha
-	jsr prch                   ;Call to draw puckcolumn
-	;Update postion of puckrow and puckcolumn
+	jsr prch	;Call to draw puckcol
+	;Update postion of puckrow and puckcol
 	lda puckdir
 	cmp #1
 	beq move1
@@ -417,94 +413,94 @@ drawpuck:
 	cmp #4
 	beq move4
 	
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;dec puckcolumn ETC
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;dec puckcol ETC
 ;TODO add 2, 4, 6, 8
 
 move1:
-;puckcolumn--
+;puckcol--
 ;puckrow--
 ;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
-	ldx puckcolumn
+	ldx puckcol
 	cpx #1
-	bpl .move1one
+	bpl .move11
 	inc puckdir
 	jmp move2
-.move1one
+.move11
 ;if we hit the top side of the wall, jump to move3 to move the ball down and to the left
 	lda puckrow
 	cmp #1
-	bpl .move1two
+	bpl .move12
 	inc puckdir
 	inc puckdir
 	jmp move3
-.move1two
-	dec puckcolumn
+.move12
+	dec puckcol
 	dec puckrow
 	jmp newpuck
 
 move2:
-;puckcolumn++
+;puckcol++
 ;puckrow--
 ;if we hit the right side of the wall, jump to move1 to move the ball up and to the left
-	ldx puckcolumn
+	ldx puckcol
 	cpx #39
-	bmi .move2one
+	bmi .move21
 	dec puckdir
 	jmp move1
-.move2one
+.move21
 ;if we hit the top side of the wall, jump to move4 to move the ball down and to the right
 	lda puckrow
 	cmp #1
-	bpl .move2two
+	bpl .move22
 	inc puckdir
 	inc puckdir
 	jmp move4
-.move2two	
-	inc puckcolumn
+.move22	
+	inc puckcol
 	dec puckrow
 	jmp newpuck
 
 move3:
-;puckcolumn--
+;puckcol--
 ;puckrow++
 ;if we hit the right side of the wall, jump to move4 to move the ball down and to the right
-	ldx puckcolumn
+	ldx puckcol
 	cpx #1
-	bpl .move3one
+	bpl .move31
 	inc puckdir
 	jmp move4
-.move3one
+.move31
 ;if we hit the bottom side of the wall, jump to move1 to move the ball up and to the left
 	lda puckrow
 	cmp #24
-	bmi .move3two
+	bmi .move32
 	dec puckdir
 	dec puckdir
 	jmp move1
-.move3two
-	dec puckcolumn
+.move32
+	dec puckcol
 	inc puckrow
 	jmp newpuck
 
 move4:
-;puckcolumn++
+;puckcol++
 ;puckrow++
 ;if we hit the right side of the wall, jump to move3 to move the ball down and to the left
-	ldx puckcolumn
+	ldx puckcol
 	cpx #39
-	bmi .move4one
+	bmi .move41
 	dec puckdir
 	jmp move3
-.move4one
+.move41
 ;if we hit the bottom side of the wall, jump to move2 to move the ball up and to the right
 	lda puckrow
 	cmp #24
-	bmi .move4two
+	bmi .move42
 	dec puckdir
 	dec puckdir
 	jmp move2	
-.move4two
-	inc puckcolumn
+.move42
+	inc puckcol
 	inc puckrow
 	jmp newpuck
 
@@ -513,7 +509,7 @@ newpuck:
 	pha
 	lda puckrow
         pha
-        lda puckcolumn
+        lda puckcol
 	pha
-	jsr prch                   ;Call to draw puckcolumn
+	jsr prch                   ;Call to draw puckcol
 	rts
