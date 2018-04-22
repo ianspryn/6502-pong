@@ -197,8 +197,6 @@ movepad	cmp #'w'
 	beq rpaddn	;Move right paddle down
 	rts
 
-return	rts
-
 ;Delete either top or bottom of paddle in preparation of drawing next phase of new paddle position
 clrpad	lda #' '
         pha
@@ -281,7 +279,9 @@ rpaddn	ldy rpaddle	;Load the current position of the right paddle
 	ldx #39
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
-		
+
+return	rts
+
 prch:
 	;pull off pointer return address from stack=
 	pla
@@ -338,106 +338,35 @@ rtch	pla
 	rts
 .adrs	.DW $0000		;pointer return address
 
-;Initialize paddles
-inipad:	lda #$F6
+;;
+;;Initialize paddles
+;;
+inipad	lda #$F6	;For left paddle
 	pha
 	lda lpaddle
-	pha
-	lda #0
-	pha
-	jsr prch
-
-	lda #$F6
-	pha
-	lda lpaddle
-	clc
-	adc #1
-	pha
-	lda #0
-	pha
-	jsr prch
-
-	lda #$F6
-	pha
-	lda lpaddle
-	clc
-	adc #2
-	pha
-	lda #0
-	pha
-	jsr prch
-
-	lda #$F6
-	pha
-	lda lpaddle
-	clc
-	adc #3
-	pha
-	lda #0
-	pha
-	jsr prch
-
-	lda #$F6
-	pha
-	lda lpaddle
-	clc
-	adc #4
+	adc .add
 	pha
 	lda #0
 	pha
 	jsr prch
 	
-
-
-	lda #$F6
+	lda #$F6	;For right paddle
 	pha
 	lda rpaddle
+	adc .add
 	pha
 	lda #39
 	pha
 	jsr prch
 
-	lda #$F6
-	pha
-	lda rpaddle
-	clc
-	adc #1
-	pha
-	lda #39
-	pha
-	jsr prch
+	inc .add
 
-	lda #$F6
-	pha
-	lda rpaddle
-	clc
-	adc #2
-	pha
-	lda #39
-	pha
-	jsr prch
+	lda .add
+	cmp #5		;We want to draw only 5 parts of the paddle
+	beq return
+	jmp inipad
+.add	.DB 0		;Used to advance position of paddle drawing
 
-	lda #$F6
-	pha
-	lda rpaddle
-	clc
-	adc #3
-	pha
-	lda #39
-	pha
-	jsr prch
-
-	lda #$F6
-	pha
-	lda rpaddle
-	clc
-	adc #4
-	pha
-	lda #39
-	pha
-	jsr prch
-	
-	rts
 
 drwpuck	inc btimer1
 	lda btimer1
