@@ -530,10 +530,22 @@ score	lda puckcol
 	beq .p1sc
 	jmp .p2sc
 .p1sc	inc player1
-	;;TODO: draw new p1sc
+	lda player1
+	pha
+	lda #27
+	pha
+	lda #10
+	pha
+	jsr prch
 	jmp restart
 .p2sc	inc player2
-	;;TODO: draw new p2sc
+	lda player2
+	pha
+	lda #27
+	pha
+	lda #30
+	pha
+	jsr prch
 	jmp restart
 	
 ;Resets the position of the puck to the middle, it's direction to 1, and jumps to main	
