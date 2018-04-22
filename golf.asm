@@ -10,7 +10,7 @@
 	.TF golf.prg,BIN	; Object filename and format
 
 ; Define some constants
-  	.OR	$0000	;Start code at address $0000
+  	.OR $0000	;Start code at address $0000
 	jmp start
 
 ; Define zero-page storage
@@ -35,7 +35,8 @@ irqvech	= irqvecl+1
 inbuff	.BS $20
 
 irhlo	.DW irhand	;Store address of IRQ handler for init.
-btimer	.DB 0		;Timer used to move ball slower
+btimer1	.DB 0		;Timer used to move ball slower
+btimer2	.DB 0		;Timer used to move ball slower
 player1	.DB 0		;player1's (left) score
 player2	.DB 0		;player2's (right) score
 lpaddle	.DB 5
@@ -104,7 +105,7 @@ start	cld
 	iny
 	bne .loop4
 	jsr welcome
-	;jsr inipad	;To be used once we remove it from main1 in order to initialize it
+	jsr inipad
 	jsr initirv	;Initialize ACIA and IRQ vectors.
 	jmp main	;Then main, waiting for interrupt.
 
@@ -116,7 +117,6 @@ welcome
 ;;	Infinite main loop, waiting for interrupt.
 ;;
 main	jsr drwpuck
-	jsr inipad	;For now, we call this so the puck doesn't overwrite the paddle on the screen
 ;;
 ;;	Get one character from the buffer, if there's one there.
 ;;
@@ -235,12 +235,14 @@ lpadup	ldy lpaddle	;Load the current position of the left paddle
         rts
 
 lpaddn	ldy lpaddle	;Load the current position of the left paddle
-	cpy #22		;Are we at the bottom? If so, don't go any lower
+	cpy #19		;Are we at the bottom? If so, don't go any lower
 	bpl return	;If we are at the bottom, then rts
 	ldx #0		;Load column number into x
 	jsr clrpad	;Clear the top part of the paddle
 	inc lpaddle	;Move pointer of the paddle position down
 	ldy lpaddle	;Reset y to the new location of the paddle
+	iny
+	iny
 	iny
 	iny		;Move position of y to bottom of paddle
 	lda #$F6	;Character for left paddle
@@ -259,21 +261,23 @@ rpadup	ldy rpaddle	;Load the current position of the right paddle
         jsr clrpad	;Clear the bottom part of the paddle
 	dec rpaddle	;Move pointer of paddle position up
 	ldy rpaddle	;Reset y to the new location of the paddle
-	lda #$F5	;Character for right paddle
+	lda #$F6	;Character for right paddle
 	ldx #39
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
 rpaddn	ldy rpaddle	;Load the current position of the right paddle
-	cpy #22		;Are we at the bottom? If so, don't go any lower
+	cpy #19		;Are we at the bottom? If so, don't go any lower
 	bpl return	;If we are at the bottom, then rts
 	ldx #39		;Load column number into x
 	jsr clrpad	;Clear the top part of the paddle
 	inc rpaddle	;Move pointer of the paddle position down
 	ldy rpaddle	;Reset y to the new location of the paddle
 	iny
+	iny
+	iny
 	iny		;Move position of y to bottom of paddle
-	lda #$F5	;Character for left paddle
+	lda #$F6	;Character for left paddle
 	ldx #39
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
@@ -435,13 +439,19 @@ inipad:	lda #$F6
 	
 	rts
 
-drwpuck	inc btimer
-	lda btimer
-	cmp #100
+drwpuck	inc btimer1
+	lda btimer1
+	cmp #255
+	beq .timer
+	rts
+.timer	inc btimer2
+	lda btimer2
+	cmp #5
 	beq .skip
 	rts
 .skip	lda #0
-	sta btimer
+	sta btimer1
+	sta btimer2
 	lda #' '
 	pha
 	lda puckrow
@@ -460,8 +470,13 @@ drwpuck	inc btimer
 	cmp #4
 	beq move4
 
+;;
+;;puckcol--
+;;puckrow--
+;;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
+;;
 move1	ldx puckcol
-	cpx #1
+	cpx #2
 	bpl .move11
 	lda player1
 	pha
@@ -483,7 +498,7 @@ move1	ldx puckcol
 ;;if we hit the right side of the wall, jump to move1 to move the ball up and to the left
 ;;
 move2	ldx puckcol
-	cpx #39
+	cpx #38
 	bmi .move21
 	lda player2
 	pha
@@ -505,7 +520,7 @@ move2	ldx puckcol
 ;;if we hit the right side of the wall, jump to move4 to move the ball down and to the right
 ;;
 move3	ldx puckcol
-	cpx #1
+	cpx #2
 	bpl .move31
 	lda player1
 	pha
@@ -513,7 +528,7 @@ move3	ldx puckcol
 	inc puckdir
 	jmp move4	;if at left wall, start moving in direction 4
 .move31	lda puckrow
-	cmp #22
+	cmp #23
 	bmi .move32
 	dec puckdir
 	dec puckdir
@@ -527,7 +542,7 @@ move3	ldx puckcol
 ;;if we hit the right side of the wall, jump to move3 to move the ball down and to the left
 ;;
 move4	ldx puckcol
-	cpx #39
+	cpx #38
 	bmi .move41
 	lda player2
 	pha
@@ -535,7 +550,7 @@ move4	ldx puckcol
 	dec puckdir
 	jmp move3	;if at right wall, start moving in direction 3
 .move41	lda puckrow
-	cmp #22
+	cmp #23
 	bmi .move42
 	dec puckdir
 	dec puckdir
@@ -600,8 +615,3 @@ restart	lda #19
 	lda #1
 	sta puckdir
 	jmp main
-;;
-;;puckcol--
-;;puckrow--
-;;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
-;;
