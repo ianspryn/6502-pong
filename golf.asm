@@ -222,6 +222,8 @@ lpadup	ldy lpaddle	;Load the current position of the left paddle
 	cpy #1		;Are we at the top? If so, don't move any higher
 	bmi return	;if we are at the top, then rts
 	iny
+	iny
+	iny
 	iny		;Move position of y to bottom of paddle
 	ldx #0		;Load column number into x
         jsr clrpad	;Clear the bottom part of the paddle
@@ -249,6 +251,8 @@ lpaddn	ldy lpaddle	;Load the current position of the left paddle
 rpadup	ldy rpaddle	;Load the current position of the right paddle
 	cpy #1		;Are we at the top? If so, don't move any higher
 	bmi return	;If we are the top, then rts
+	iny
+	iny
 	iny
 	iny		;Move position of y to bottom of paddle
 	ldx #39		;Load column number into x
@@ -358,6 +362,26 @@ inipad:	lda #$F6
 	lda #0
 	pha
 	jsr prch
+
+	lda #$F6
+	pha
+	lda lpaddle
+	clc
+	adc #3
+	pha
+	lda #0
+	pha
+	jsr prch
+
+	lda #$F6
+	pha
+	lda lpaddle
+	clc
+	adc #4
+	pha
+	lda #0
+	pha
+	jsr prch
 	
 
 
@@ -384,6 +408,26 @@ inipad:	lda #$F6
 	lda rpaddle
 	clc
 	adc #2
+	pha
+	lda #39
+	pha
+	jsr prch
+
+	lda #$F6
+	pha
+	lda rpaddle
+	clc
+	adc #3
+	pha
+	lda #39
+	pha
+	jsr prch
+
+	lda #$F6
+	pha
+	lda rpaddle
+	clc
+	adc #4
 	pha
 	lda #39
 	pha
@@ -469,7 +513,7 @@ move3	ldx puckcol
 	inc puckdir
 	jmp move4	;if at left wall, start moving in direction 4
 .move31	lda puckrow
-	cmp #24
+	cmp #22
 	bmi .move32
 	dec puckdir
 	dec puckdir
@@ -491,7 +535,7 @@ move4	ldx puckcol
 	dec puckdir
 	jmp move3	;if at right wall, start moving in direction 3
 .move41	lda puckrow
-	cmp #24
+	cmp #22
 	bmi .move42
 	dec puckdir
 	dec puckdir
