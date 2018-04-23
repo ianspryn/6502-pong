@@ -116,7 +116,7 @@ welcome
 ;;
 ;;	Infinite main loop, waiting for interrupt.
 ;;
-main	jsr drwpuck
+main	;jsr drwpuck
 ;;
 ;;	Get one character from the buffer, if there's one there.
 ;;
@@ -137,31 +137,33 @@ empty	jmp main
 ;;	IRQ handler. Invoked by CPU when a byte is ready to be read
 ;;	This code must precede initirv in assembly-code file.
 ;;
-irhand	pha ;Save registers.
+irhand	pha		;Save registers.
 	txa
 	pha
 	tya
 	pha
-	lda headptr ;Get buffer head pointer.
-	tax ;Set index register value.
+	lda headptr	;Get buffer head pointer.
+	tax		;Set index register value.
 	sec
 	sbc tailptr
-	and #$1f ;Make circular.
-	cmp #$1f ;If headptr - tailptr = 31, buffer is full.
-	beq out ;Buffer is full. Can't do anything.
-	lda iodata ;Get the character from the keyboard.
-	sta inbuff,x ;Store it into the buffer.
-	inx ;Next buffer address.
+	and #$1f	;Make circular.
+	cmp #$1f	;If headptr - tailptr = 31, buffer is full.
+	beq fail	;Buffer is full. Can't do anything.
+	lda iodata	;Get the character from the keyboard.
+	sta inbuff,x	;Store it into the buffer.
+	inx		;Next buffer address.
 	txa
-	and #%00011111 ;Clear high 3 bits to make buffer circular.
+	and #%00011111	;Clear high 3 bits to make buffer circular.
 	sta headptr
-out	pla ;Restore registers
+out	pla		;Restore registers
 	tay
 	pla
 	tax
 	pla
-	cli ;Clear interrupt mask (un-disable)
-	rti ;Return from interrupt handler.
+	cli		;Clear interrupt mask (un-disable)
+	rti		;Return from interrupt handler.
+fail	jmp out	;PRINT FAIL TO CONSOLE
+	
 
 
 
@@ -197,7 +199,9 @@ movepad	cmp #'w'
 	beq rpaddn	;Move right paddle down
 	rts
 
-;Delete either top or bottom of paddle in preparation of drawing next phase of new paddle position
+;;
+;;Delete either top or bottom of paddle in preparation of drawing next phase of new paddle position
+;;
 clrpad	lda #' '
         pha
         tya             ;Transfer paddle position to a
@@ -207,7 +211,9 @@ clrpad	lda #' '
         jsr prch
         rts
 
-;Draw a new part of a paddle
+;;
+;;Draw a new part of a paddle
+;;
 drwpad	pha
 	tya		;Transfer left or right paddle position  to a
 	pha		;Push paddle position to stack
@@ -216,6 +222,9 @@ drwpad	pha
 	jsr prch
 	rts
 
+;;
+;;Left paddle up
+;;
 lpadup	ldy lpaddle	;Load the current position of the left paddle
 	cpy #1		;Are we at the top? If so, don't move any higher
 	bmi return	;if we are at the top, then rts
@@ -232,6 +241,9 @@ lpadup	ldy lpaddle	;Load the current position of the left paddle
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
+;;
+;;Left paddle down
+;;
 lpaddn	ldy lpaddle	;Load the current position of the left paddle
 	cpy #19		;Are we at the bottom? If so, don't go any lower
 	bpl return	;If we are at the bottom, then rts
@@ -248,6 +260,9 @@ lpaddn	ldy lpaddle	;Load the current position of the left paddle
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 
+;;
+;;Right paddle up
+;;
 rpadup	ldy rpaddle	;Load the current position of the right paddle
 	cpy #1		;Are we at the top? If so, don't move any higher
 	bmi return	;If we are the top, then rts
@@ -264,6 +279,9 @@ rpadup	ldy rpaddle	;Load the current position of the right paddle
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
+;;
+;;Right paddle down
+;;
 rpaddn	ldy rpaddle	;Load the current position of the right paddle
 	cpy #19		;Are we at the bottom? If so, don't go any lower
 	bpl return	;If we are at the bottom, then rts
@@ -282,6 +300,9 @@ rpaddn	ldy rpaddle	;Load the current position of the right paddle
 
 return	rts
 
+;;
+;;Print a character to the video screen at a given location
+;;
 prch:
 	;pull off pointer return address from stack=
 	pla
@@ -339,7 +360,7 @@ rtch	pla
 .adrs	.DW $0000		;pointer return address
 
 ;;
-;;Initialize paddles
+;;Initialize paddles. Subroutine should only be used once
 ;;
 inipad	lda #$F6	;For left paddle
 	pha
@@ -421,6 +442,7 @@ move1	ldx puckcol
 .move12	dec puckcol
 	dec puckrow
 	jmp newpuck
+
 ;;
 ;;puckcol++
 ;;puckrow--
@@ -443,6 +465,7 @@ move2	ldx puckcol
 .move22	inc puckcol
 	dec puckrow
 	jmp newpuck
+
 ;;
 ;;puckcol--
 ;;puckrow++
@@ -465,6 +488,7 @@ move3	ldx puckcol
 .move32	dec puckcol
 	inc puckrow
 	jmp newpuck
+
 ;;
 ;;puckcol++
 ;;puckrow++
@@ -510,6 +534,7 @@ collide	lda puckrow
 	cmp #$f6	;Did we hit a paddle?
 	beq score	;If no paddle was hit, then increment appropriate score and reset game
 	rts		;If a paddle was hit, then continue gameplay
+
 ;;
 ;;Increments either player1's score or player2's score, and redraws the scores
 ;;
@@ -535,8 +560,10 @@ score	lda puckcol
 	pha
 	jsr prch
 	jmp restart
-	
-;Resets the position of the puck to the middle, it's direction to 1, and jumps to main	
+
+;;	
+;;Resets the position of the puck to the middle, its direction to 1, and jumps to main	
+;;
 restart	lda #19
 	sta puckcol
 	lda #13
