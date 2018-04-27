@@ -610,11 +610,14 @@ incscr	lda #24		;Score row to a
 	beq .ovrlap	;If so, someone scored 9999 wins, and we need to roll over to 0000. Also, someone's dedicated.
 	cmp #36		;Are we in the thousands place for the right score?
 	beq .ovrlap	;If so, someone scored 9999 wins, and we need to roll over to 0000. Also, someone's dedicated.
-	sbc #1		;Move over to the left by 1
+	cmp #19
+	bpl .one
+	jmp .zero
+.one	sbc #1		;Move over to the left by 1
+.zero	sbc #0
 	sta scrcol
 	jmp incscr
-.ovrlap	lda scrcol
-	adc #3
+.ovrlap	adc #2
 	sta scrcol
 	jmp incscr
 
