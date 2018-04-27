@@ -7,7 +7,7 @@
 
 	.CR 6502         ; Assemble 6502
 	.LI on,toff      ; Listing on, no timings included
-	.TF golf.prg,BIN	; Object filename and format
+	.TF golf.prg,BIN	;Object filename and format
 
 ; Define some constants
   	.OR $0000	;Start code at address $0000
@@ -34,22 +34,21 @@ irqvecl	= $fffe		;IRQ (interrupt request)      vector: fffe-ffff
 irqvech	= irqvecl+1
 inbuff	.BS $20
 
-irhlo	.DW irhand	;Store address of IRQ handler for init.
+irhlo	.DW irq	;Store address of IRQ handler for init.
 btimer1	.DB 0		;Timer used to move ball slower
 btimer2	.DB 0		;Timer used to move ball slower
-player1	.DB 0		;player1's (left) score
-player2	.DB 0		;player2's (right) score
 lpaddle	.DB 5
 rpaddle	.DB 5
 puckrow	.DB 0		;Used to keep track of the puck's row
 puckcol	.DB 0		;Used to keep track of the puck's column
 puckdir	.DB 4		;Set direction to be initially down and to the right
+scrcol	.DB 0		;Used as y-coordinate to move around video screen and rewrite score
 ;;			__________________
-;;			\		/
-;;			 1	       2
-;;
-;;			 3	  *    4
-;;			/		\
+;;			|\		/|
+;;			| 1	       2 |
+;;			|		 |
+;;			| 3	  *    4 |
+;;			|/		\|
 ;;			__________________
 curline	.DW 2		;Used for current line where character is being drawn to
 
@@ -79,12 +78,11 @@ row23	.DW $7370
 row24	.DW $7398
 row25	.DW $73C0
 
-msg1	.AZ "Welcome! Press 'w' or 's' to move the left paddle, and 'p' or ';' to move the'"
+msg1	.AZ "Welcome! Press 'w' or 's' to move the left paddle, and 'p' or ';' to move the right paddle"
 
 	.BS $20		;32-byte circular input buffer
 headptr .DB 0		;Initialize buffer offsets to zero
 tailptr .DB 0					
-
 	.BS $0300-*	;New origin. Skip to beginning of program, proper.
 
 ;;
@@ -104,19 +102,79 @@ start	cld
 .loop4	sta fourth,y
 	iny
 	bne .loop4
-	jsr welcome
-	jsr inipad
+	jsr welcome	;Print to consule instructions to user
+	jsr inipad	;Initialize the pads
+	jsr iniscr	;Initilize drawing the scores
 	jsr initirv	;Initialize ACIA and IRQ vectors.
 	jmp main	;Then main, waiting for interrupt.
 
 
-welcome	
-	rts
+welcome	rts
+
+;;
+;;Initialize paddles. Subroutine should only be used once
+;;
+inipad	lda #$F6	;For left paddle
+	pha
+	lda lpaddle
+	adc .add
+	pha
+	lda #0
+	pha
+	jsr prch
+
+	lda #$F6	;For right paddle
+	pha
+	lda rpaddle
+	adc .add
+	pha
+	lda #39
+	pha
+	jsr prch
+
+	inc .add
+
+	lda .add
+	cmp #5		;We want to draw only 5 parts of the paddle
+	beq .return
+	jmp inipad
+.add	.DB 0		;Used to advance position of paddle drawing
+.return	rts
+
+;;
+;;Initialize scores for 
+;;
+iniscr	clc
+	lda #$39	;Initilize the score on the left for player 1 to 0
+	pha
+	lda #24
+	pha
+	lda #0
+	adc .add
+	pha
+	jsr prch
+
+	lda #$39	;Initilize the score on the right for player 2 to 0
+	pha
+	lda #24
+	pha
+	lda #36
+	adc .add
+	pha
+	jsr prch
+
+	inc .add
+	lda .add
+	cmp #4
+	beq .return
+	jmp iniscr
+.add	.DB 0
+.return	rts
 
 ;;
 ;;	Infinite main loop, waiting for interrupt.
 ;;
-main	;jsr drwpuck
+main	jsr drwpuck
 ;;
 ;;	Get one character from the buffer, if there's one there.
 ;;
@@ -137,7 +195,7 @@ empty	jmp main
 ;;	IRQ handler. Invoked by CPU when a byte is ready to be read
 ;;	This code must precede initirv in assembly-code file.
 ;;
-irhand	pha		;Save registers.
+irq	pha		;Save registers.
 	txa
 	pha
 	tya
@@ -163,13 +221,10 @@ out	pla		;Restore registers
 	cli		;Clear interrupt mask (un-disable)
 	rti		;Return from interrupt handler.
 fail	jmp out	;PRINT FAIL TO CONSOLE
-	
-
-
 
 ;;
 ;;	Intialize interrupt vector.
-;;	This code must follow irhand code in assembly-code file.
+;;	This code must follow irq code in assembly-code file.
 ;;
 initirv lda #%00001001
 	sta iocmd	;Set command status
@@ -204,9 +259,9 @@ movepad	cmp #'w'
 ;;
 clrpad	lda #' '
         pha
-        tya             ;Transfer paddle position to a
+        tya             ;Transfer paddle position (row) to a
         pha
-	txa
+	txa		;Transfer column number (0 or 39) to a
         pha
         jsr prch
         rts
@@ -214,10 +269,11 @@ clrpad	lda #' '
 ;;
 ;;Draw a new part of a paddle
 ;;
-drwpad	pha
-	tya		;Transfer left or right paddle position  to a
+drwpad	lda #$F6	;Character for paddle
+	pha
+	tya		;Transfer left or right paddle position to a
 	pha		;Push paddle position to stack
-	txa		;Load column (0 or 39) into a
+	txa		;Transfer column number (0 or 39) to a
 	pha
 	jsr prch
 	rts
@@ -236,8 +292,7 @@ lpadup	ldy lpaddle	;Load the current position of the left paddle
         jsr clrpad	;Clear the bottom part of the paddle
 	dec lpaddle	;Move pointer of paddle position up
 	ldy lpaddle	;Reset y to the new location of the paddle
-	lda #$F6	;Character for left paddle
-	ldx #0
+	ldx #0		;Column number
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
@@ -255,8 +310,7 @@ lpaddn	ldy lpaddle	;Load the current position of the left paddle
 	iny
 	iny
 	iny		;Move position of y to bottom of paddle
-	lda #$F6	;Character for left paddle
-	ldx #0
+	ldx #0		;Column number
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 
@@ -274,8 +328,7 @@ rpadup	ldy rpaddle	;Load the current position of the right paddle
         jsr clrpad	;Clear the bottom part of the paddle
 	dec rpaddle	;Move pointer of paddle position up
 	ldy rpaddle	;Reset y to the new location of the paddle
-	lda #$F6	;Character for right paddle
-	ldx #39
+	ldx #39		;Column number
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
@@ -293,8 +346,7 @@ rpaddn	ldy rpaddle	;Load the current position of the right paddle
 	iny
 	iny
 	iny		;Move position of y to bottom of paddle
-	lda #$F6	;Character for left paddle
-	ldx #39
+	ldx #39		;Column number
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 
@@ -303,12 +355,11 @@ return	rts
 ;;
 ;;Print a character to the video screen at a given location
 ;;
-prch:
-	;pull off pointer return address from stack=
-	pla
-	sta .adrs	;Pointer return address
+prch	pla		;Pull off pointer return address from stack
+	sta .adrs
 	pla
 	sta .adrs+1
+	
 	pla		;Get column, because it's the last thing we pushed
 	tay		;Save column
 	pla		;Get row
@@ -321,20 +372,19 @@ prch:
 	pla		;Get character ('*' or ' ', for example)
 	sta (curline),y	;y is the column number, and we don't need to double it because it's 1 byte per column
 
-	;restore pointer return adress to stack
-	lda .adrs+1
+	lda .adrs+1	;Restore pointer return adress to stack
 	pha
 	lda .adrs
 	pha
 
 	rts
-.adrs	.DW $0000		;pointer return address
+.adrs	.DW $0000	;Pointer return address
 
-;return char
-;return what is in that space
-;if the place that doesn't have a space, then the puc should not be placed therea nd soemthing else shoudl happen
-rtch	pla
-	sta .adrs	;Pointer return address
+;;
+;;Place on the stack what character is at a given location on the video screen
+;;
+rtch	pla		;Pull off pointer return address from stack
+	sta .adrs
 	pla
 	sta .adrs+1
 
@@ -350,44 +400,13 @@ rtch	pla
 	lda (curline),y	;Load into a the value stored at passed in parameters
 	pha
 	
-	;restore pointer return adress to stack
-	lda .adrs+1
+	lda .adrs+1	;Restore pointer return adress to stack
 	pha
 	lda .adrs
 	pha
 
 	rts
-.adrs	.DW $0000		;pointer return address
-
-;;
-;;Initialize paddles. Subroutine should only be used once
-;;
-inipad	lda #$F6	;For left paddle
-	pha
-	lda lpaddle
-	adc .add
-	pha
-	lda #0
-	pha
-	jsr prch
-	
-	lda #$F6	;For right paddle
-	pha
-	lda rpaddle
-	adc .add
-	pha
-	lda #39
-	pha
-	jsr prch
-
-	inc .add
-
-	lda .add
-	cmp #5		;We want to draw only 5 parts of the paddle
-	beq return
-	jmp inipad
-.add	.DB 0		;Used to advance position of paddle drawing
-
+.adrs	.DW $0000	;Pointer return address
 
 drwpuck	inc btimer1
 	lda btimer1
@@ -402,6 +421,7 @@ drwpuck	inc btimer1
 .skip	lda #0
 	sta btimer1
 	sta btimer2
+
 	lda #' '
 	pha
 	lda puckrow
@@ -428,8 +448,9 @@ drwpuck	inc btimer1
 move1	ldx puckcol
 	cpx #2
 	bpl .move11
-	lda player1
-	pha
+;	lda score11	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Do we need this line?
+;	pha
+	ldy #0		;Column value of left paddle
 	jsr collide
 	inc puckdir
 	jmp move2	;if at left wall, start moving in direction 2
@@ -451,8 +472,9 @@ move1	ldx puckcol
 move2	ldx puckcol
 	cpx #38
 	bmi .move21
-	lda player2
-	pha
+;	lda score21
+;	pha
+	ldy #39		;Column value of right paddle
 	jsr collide
 	dec puckdir
 	jmp move1	;if at right wall, start moving in direction 1
@@ -474,8 +496,9 @@ move2	ldx puckcol
 move3	ldx puckcol
 	cpx #2
 	bpl .move31
-	lda player1
-	pha
+;	lda score11
+;	pha
+	ldy #0		;Column value of left paddle
 	jsr collide
 	inc puckdir
 	jmp move4	;if at left wall, start moving in direction 4
@@ -497,8 +520,9 @@ move3	ldx puckcol
 move4	ldx puckcol
 	cpx #38
 	bmi .move41
-	lda player2
-	pha
+;	lda score21
+;	pha
+	ldy #39		;Column value of right paddle
 	jsr collide
 	dec puckdir
 	jmp move3	;if at right wall, start moving in direction 3
@@ -512,7 +536,7 @@ move4	ldx puckcol
 	inc puckrow
 	jmp newpuck
 
-newpuck	lda #'*'
+newpuck	lda #$FE
 	pha
 	lda puckrow
         pha
@@ -527,47 +551,83 @@ newpuck	lda #'*'
 ;;
 collide	lda puckrow
 	pha
-	lda puckcol
+	tya		;Transfer the column (either 0 or 39) to a
 	pha
 	jsr rtch	;Returns character at that space
 	pla		;Pull the character returned from rtch
-	cmp #$f6	;Did we hit a paddle?
-	beq score	;If no paddle was hit, then increment appropriate score and reset game
+	cmp #$F6	;Did we hit a paddle?
+	bne score	;If no paddle was hit, then increment appropriate score and reset game
 	rts		;If a paddle was hit, then continue gameplay
 
 ;;
-;;Increments either player1's score or player2's score, and redraws the scores
+;;Increments either score1's score or score2's score, and redraws the scores
 ;;
 score	lda puckcol
-	cmp #1
-	beq .p1sc
-	jmp .p2sc
-.p1sc	inc player1
-	lda player1
+	cmp #19
+	bmi .win2	;Puck is on the left side of the screen, and player 2 (on the right) won a point
+	jmp .win1	;Puck is on the right side of the screen, and player 1 (on the left) won a point
+.win1	lda #3		;One's place for player 1's score
+	sta scrcol
+	jmp incscr	;Increase score of player 1
+.win2	lda #39		;One's place for player 2's score
+	sta scrcol
+	jmp incscr	;Increase score of player 2
+
+;;
+;;Increment score
+;;
+incscr	lda #24		;Score row to a
 	pha
-	lda #27
+	lda scrcol	;Score column to a
 	pha
-	lda #10
+	jsr rtch
+	pla		;The character at the given location (0 - 9)
+	cmp #$39	;Is it the number 9? If so, we're about to have an overflow
+	beq .nxtpwr	;Shift the score column variable (scrcol) to the left to the next power of ten
+	adc #1		;If it is not 9, then add 1 to the score
+	;prepare to call prch
+	pha		;Push the new number
+	lda #24		;Row to a
 	pha
-	jsr prch
+	lda scrcol	;Column to a
+	pha
+	jsr prch	;Draw the new number for the score
 	jmp restart
-.p2sc	inc player2
-	lda player2
+
+;;
+;;Move the score column pointer to the next power of ten (to the left) of the score
+;;
+.nxtpwr	lda #$30	;Since we're about to have overflow, replace the current number with 0 (because 9 --> 0)
 	pha
-	lda #27
+	lda #24		;Row to a
 	pha
-	lda #30
+	lda scrcol	;Column to a
 	pha
-	jsr prch
-	jmp restart
+	jsr prch	;Replace the 9 with a 0
+	
+	lda scrcol
+	cmp #0		;Are we in the thousands place for the left score?
+	beq .ovrlap	;If so, someone scored 9999 wins, and we need to roll over to 0000. Also, someone's dedicated.
+	cmp #36		;Are we in the thousands place for the right score?
+	beq .ovrlap	;If so, someone scored 9999 wins, and we need to roll over to 0000. Also, someone's dedicated.
+	sbc #1		;Move over to the left by 1
+	sta scrcol
+	jmp incscr
+.ovrlap	lda scrcol
+	adc #3
+	sta scrcol
+	jmp incscr
+
+
+
 
 ;;	
 ;;Resets the position of the puck to the middle, its direction to 1, and jumps to main	
 ;;
-restart	lda #19
+restart	lda #1
 	sta puckcol
-	lda #13
-	sta puckrow
 	lda #1
+	sta puckrow
+	lda #4
 	sta puckdir
 	jmp main
