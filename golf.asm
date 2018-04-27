@@ -35,6 +35,7 @@ irqvech	= irqvecl+1
 inbuff	.BS $20
 
 irhlo	.DW irq	;Store address of IRQ handler for init.
+curline	.DW 2		;Used for current line where character is being drawn to
 btimer1	.DB 0		;Timer used to move ball slower
 btimer2	.DB 0		;Timer used to move ball slower
 lpaddle	.DB 5
@@ -42,7 +43,7 @@ rpaddle	.DB 5
 puckrow	.DB 0		;Used to keep track of the puck's row
 puckcol	.DB 0		;Used to keep track of the puck's column
 puckdir	.DB 4		;Set direction to be initially down and to the right
-scrcol	.DB 0		;Used as y-coordinate to move around video screen and rewrite score
+scrcol	.DB 0		;Used as pointer to a given location to assist in rewriting the score
 ;;			__________________
 ;;			|\		/|
 ;;			| 1	       2 |
@@ -50,7 +51,7 @@ scrcol	.DB 0		;Used as y-coordinate to move around video screen and rewrite scor
 ;;			| 3	  *    4 |
 ;;			|/		\|
 ;;			__________________
-curline	.DW 2		;Used for current line where character is being drawn to
+
 
 row1	.DW $7000
 row2	.DW $7028
@@ -547,7 +548,7 @@ newpuck	lda #$FE
 	
 ;;
 ;;Collision
-;;Branches to score if there is no collision, returns to subroutine otherwise
+;;Branches to score if there is no collision, returns to subroutine (and continues game) otherwise
 ;;
 collide	lda puckrow
 	pha
@@ -560,39 +561,38 @@ collide	lda puckrow
 	rts		;If a paddle was hit, then continue gameplay
 
 ;;
-;;Increments either score1's score or score2's score, and redraws the scores
+;;Determine which player won the point
 ;;
 score	lda puckcol
-	cmp #19
+	cmp #19		;Which side of the screen is the puck on?
 	bmi .win2	;Puck is on the left side of the screen, and player 2 (on the right) won a point
 	jmp .win1	;Puck is on the right side of the screen, and player 1 (on the left) won a point
 .win1	lda #3		;One's place for player 1's score
-	sta scrcol
+	sta scrcol	;Save the one's place column for player 1's score in scrcol
 	jmp incscr	;Increase score of player 1
 .win2	lda #39		;One's place for player 2's score
-	sta scrcol
+	sta scrcol	;Save the one's place column for player 2's score in scrcol
 	jmp incscr	;Increase score of player 2
 
 ;;
-;;Increment score
+;;Increment player 1's or player 2's score
 ;;
 incscr	lda #24		;Score row to a
 	pha
 	lda scrcol	;Score column to a
 	pha
-	jsr rtch
+	jsr rtch	;Return the character a given location by placing it on the stack
 	pla		;The character at the given location (0 - 9)
 	cmp #$39	;Is it the number 9? If so, we're about to have an overflow
 	beq .nxtpwr	;Shift the score column variable (scrcol) to the left to the next power of ten
 	adc #1		;If it is not 9, then add 1 to the score
-	;prepare to call prch
 	pha		;Push the new number
 	lda #24		;Row to a
 	pha
 	lda scrcol	;Column to a
 	pha
 	jsr prch	;Draw the new number for the score
-	jmp restart
+	jmp restart	;Reset the ball for a new game
 
 ;;
 ;;Move the score column pointer to the next power of ten (to the left) of the score
@@ -607,30 +607,45 @@ incscr	lda #24		;Score row to a
 	
 	lda scrcol
 	cmp #0		;Are we in the thousands place for the left score?
-	beq .ovrlap	;If so, someone scored 9999 wins, and we need to roll over to 0000. Also, someone's dedicated.
+	beq .ovrlap	;If so, player 1 scored 9999 wins, and we need to roll over to 0000. This is a very long game
 	cmp #36		;Are we in the thousands place for the right score?
-	beq .ovrlap	;If so, someone scored 9999 wins, and we need to roll over to 0000. Also, someone's dedicated.
-	cmp #19
-	bpl .one
-	jmp .zero
+	beq .ovrlap	;If so, player 2 scored 9999 wins, and we need to roll over to 0000. Someone must be a pong expert
+	cmp #19		;Are we on the left side or the right side of the video screen?
+	bpl .one	;If we're on the right side, move to .one
+	jmp .zero	;Otherwise, move to .zero
 .one	sbc #1		;Move over to the left by 1
-.zero	sbc #0
-	sta scrcol
-	jmp incscr
-.ovrlap	adc #2
-	sta scrcol
-	jmp incscr
-
-
-
+.zero	sbc #0		;Move over to the left by 0 (which actually moves it over by 1. Perhaps a weird 6502 glitch?)
+	sta scrcol	;Update the score column pointer
+	jmp incscr	;Now pointing in the next ten's power, increase the score
+.ovrlap	adc #2		;If we are in the thousand's place, reset to the one's place by adding 2 (which actually moves it 3. Weird 6502 glitch?)
+	sta scrcol	;Update the score column pointer
+	jmp incscr	;Update the score
 
 ;;	
-;;Resets the position of the puck to the middle, its direction to 1, and jumps to main	
+;;Resets the position of the puck to the top left, its direction to 1, and jumps to main	
 ;;
-restart	lda #1
+restart	lda #1		;Set the puck column to 1
 	sta puckcol
-	lda #1
+	lda #1		;Set the puck row to 1
 	sta puckrow
 	lda #4
-	sta puckdir
-	jmp main
+	sta puckdir	;Set the direction of the puck to 4 (down and to the right)
+
+;;
+;;Wait for user to press space bar to continue game after a point has been scored
+;;
+.space	lda tailptr
+	cmp headptr	;Check pointers.
+	beq .space	;If equal, buffer is empty.
+	tax
+	lda inbuff,x	;Get the character.
+	pha		;Save the character for now
+	inc tailptr	;Increment the offset.
+	lda tailptr
+	and #%00011111	;Clear high 3 bits to make buffer circular.
+	sta tailptr
+	pla		;Pull the character
+	cmp #$20	;Is the character a space?
+	beq .jump	;If so, continue the game
+	jmp .space	;Otherwise, wait for the user to press a space
+.jump	jmp main
