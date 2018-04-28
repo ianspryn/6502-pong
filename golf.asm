@@ -34,7 +34,7 @@ irqvecl	= $fffe		;IRQ (interrupt request)      vector: fffe-ffff
 irqvech	= irqvecl+1
 inbuff	.BS $20
 
-irhlo	.DW irq	;Store address of IRQ handler for init.
+irhlo	.DW irq		;Store address of IRQ handler for init.
 curline	.DW 2		;Used for current line where character is being drawn to
 btimer1	.DB 0		;Timer used to move ball slower
 btimer2	.DB 0		;Timer used to move ball slower
@@ -51,7 +51,6 @@ scrcol	.DB 0		;Used as pointer to a given location to assist in rewriting the sc
 ;;			| 3	  *    4 |
 ;;			|/		\|
 ;;			__________________
-
 
 row1	.DW $7000
 row2	.DW $7028
@@ -79,7 +78,8 @@ row23	.DW $7370
 row24	.DW $7398
 row25	.DW $73C0
 
-msg1	.AZ "Welcome! Press 'w' or 's' to move the left paddle, and 'p' or ';' to move the right paddle"
+msg1	.AZ "Press 'w' or 's' to move the left paddle and 'p' or ';' to move the right paddle"
+msg2	.AZ "Press space to continue..."
 
 	.BS $20		;32-byte circular input buffer
 headptr .DB 0		;Initialize buffer offsets to zero
@@ -110,12 +110,18 @@ start	cld
 	jmp main	;Then main, waiting for interrupt.
 
 
-welcome	rts
-
+welcome	lda msg1,x
+	cmp #0
+	beq .return
+	sta iobase
+	inx
+	jmp welcome
+.return rts
 ;;
 ;;Initialize paddles. Subroutine should only be used once
 ;;
-inipad	lda #$F6	;For left paddle
+inipad	clc
+	lda #$F6	;For left paddle
 	pha
 	lda lpaddle
 	adc .add
@@ -146,7 +152,7 @@ inipad	lda #$F6	;For left paddle
 ;;Initialize scores for 
 ;;
 iniscr	clc
-	lda #$39	;Initilize the score on the left for player 1 to 0
+	lda #$30	;Initilize the score on the left for player 1 to 0
 	pha
 	lda #24
 	pha
@@ -155,7 +161,7 @@ iniscr	clc
 	pha
 	jsr prch
 
-	lda #$39	;Initilize the score on the right for player 2 to 0
+	lda #$30	;Initilize the score on the right for player 2 to 0
 	pha
 	lda #24
 	pha
@@ -221,7 +227,15 @@ out	pla		;Restore registers
 	pla
 	cli		;Clear interrupt mask (un-disable)
 	rti		;Return from interrupt handler.
-fail	jmp out	;PRINT FAIL TO CONSOLE
+fail	ldx #0
+.loop	lda .msg,x
+	cmp #0
+	beq out
+	sta iobase
+	inx
+	jmp .loop
+	jmp out
+.msg	.AZ "Failed to save single character"
 
 ;;
 ;;	Intialize interrupt vector.
@@ -634,9 +648,20 @@ restart	lda #1		;Set the puck column to 1
 ;;
 ;;Wait for user to press space bar to continue game after a point has been scored
 ;;
-.space	lda tailptr
+	lda #lf
+	sta iobase
+	ldx #0
+.msg2	lda msg2,x
+	cmp #0
+	beq .next
+	sta iobase
+	inx
+	jmp .msg2
+.next	lda #cr
+	sta iobase
+.wait	lda tailptr
 	cmp headptr	;Check pointers.
-	beq .space	;If equal, buffer is empty.
+	beq .wait	;If equal, buffer is empty.
 	tax
 	lda inbuff,x	;Get the character.
 	pha		;Save the character for now
@@ -647,5 +672,5 @@ restart	lda #1		;Set the puck column to 1
 	pla		;Pull the character
 	cmp #$20	;Is the character a space?
 	beq .jump	;If so, continue the game
-	jmp .space	;Otherwise, wait for the user to press a space
+	jmp .wait	;Otherwise, wait for the user to press a space
 .jump	jmp main
