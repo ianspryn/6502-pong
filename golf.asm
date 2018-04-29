@@ -430,7 +430,7 @@ drwpuck	inc btimer1
 	rts
 .timer	inc btimer2
 	lda btimer2
-	cmp #5
+	cmp #6
 	beq .skip
 	rts
 .skip	lda #0
