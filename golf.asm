@@ -36,14 +36,15 @@ inbuff	.BS $20
 
 irhlo	.DW irq		;Store address of IRQ handler for init.
 curline	.DW 2		;Used for current line where character is being drawn to
+scrcol	.DB 0		;Used as pointer to a given location to assist in rewriting the score
 btimer1	.DB 0		;Timer used to move ball slower
 btimer2	.DB 0		;Timer used to move ball slower
-lpaddle	.DB 5
-rpaddle	.DB 5
+lpaddle	.DB 5		;Position of top part of left paddle
+rpaddle	.DB 5		;Positio nof top part of right paddle
 puckrow	.DB 0		;Used to keep track of the puck's row
 puckcol	.DB 0		;Used to keep track of the puck's column
 puckdir	.DB 4		;Set direction to be initially down and to the right
-scrcol	.DB 0		;Used as pointer to a given location to assist in rewriting the score
+pspeed	.DB 1		;Used to control the magnitude of the velocity of the pucks movement
 ;;			__________________
 ;;			|\		/|
 ;;			| 1	       2 |
@@ -103,22 +104,25 @@ start	cld
 .loop4	sta fourth,y
 	iny
 	bne .loop4
-	jsr welcome	;Print to consule instructions to user
-	jsr inipad	;Initialize the pads
+	jsr welcome	;Print to console instructions to user
+	jsr inipad	;Initialize the paddles
 	jsr iniscr	;Initilize drawing the scores
 	jsr initirv	;Initialize ACIA and IRQ vectors.
 	jmp main	;Then main, waiting for interrupt.
 
-
+;;
+;;Print message containing instructions to console
+;;
 welcome	lda msg1,x
 	cmp #0
 	beq .return
-	sta iobase
+	sta iobase	;Print new line
 	inx
 	jmp welcome
 .return rts
+
 ;;
-;;Initialize paddles. Subroutine should only be used once
+;;Initialize paddles.
 ;;
 inipad	clc
 	lda #$F6	;For left paddle
@@ -149,32 +153,32 @@ inipad	clc
 .return	rts
 
 ;;
-;;Initialize scores for 
+;;Initialize scores to 0000 for both users 
 ;;
 iniscr	clc
 	lda #$30	;Initilize the score on the left for player 1 to 0
 	pha
-	lda #24
+	lda #24		;Bottom column of video screen
 	pha
-	lda #0
-	adc .add
+	lda #0		;Starting column to draw score to
+	adc .add	;Increment column
 	pha
-	jsr prch
+	jsr prch	;Draw 0
 
 	lda #$30	;Initilize the score on the right for player 2 to 0
 	pha
-	lda #24
+	lda #24		;Bottom column of video screen
 	pha
-	lda #36
-	adc .add
+	lda #36		;Starting column to draw score to
+	adc .add	;Increment column
 	pha
-	jsr prch
+	jsr prch	;Draw 0
 
 	inc .add
 	lda .add
-	cmp #4
-	beq .return
-	jmp iniscr
+	cmp #4		;Have we drawn all four 0's yet?
+	beq .return	;Yes, exit
+	jmp iniscr	;No, go back and draw the next next one
 .add	.DB 0
 .return	rts
 
@@ -182,6 +186,7 @@ iniscr	clc
 ;;	Infinite main loop, waiting for interrupt.
 ;;
 main	jsr drwpuck
+
 ;;
 ;;	Get one character from the buffer, if there's one there.
 ;;
@@ -196,29 +201,29 @@ getch	lda tailptr
 	and #%00011111	;Clear high 3 bits to make buffer circular.
 	sta tailptr
 	jmp getch
-empty	jmp main
+empty	jmp main	;Maintain infinite loop
 
 ;;
 ;;	IRQ handler. Invoked by CPU when a byte is ready to be read
 ;;	This code must precede initirv in assembly-code file.
 ;;
-irq	pha		;Save registers.
+irq	pha		;Save registers
 	txa
 	pha
 	tya
 	pha
-	lda headptr	;Get buffer head pointer.
-	tax		;Set index register value.
+	lda headptr	;Get buffer head pointer
+	tax		;Set index register value
 	sec
 	sbc tailptr
-	and #$1f	;Make circular.
-	cmp #$1f	;If headptr - tailptr = 31, buffer is full.
-	beq fail	;Buffer is full. Can't do anything.
-	lda iodata	;Get the character from the keyboard.
-	sta inbuff,x	;Store it into the buffer.
-	inx		;Next buffer address.
+	and #$1f	;Make circular
+	cmp #$1f	;If headptr - tailptr = 31, buffer is full
+	beq fail	;Buffer is full. Can't do anything
+	lda iodata	;Get the character from the keyboard
+	sta inbuff,x	;Store it into the buffer
+	inx		;Next buffer address
 	txa
-	and #%00011111	;Clear high 3 bits to make buffer circular.
+	and #%00011111	;Clear high 3 bits to make buffer circular
 	sta headptr
 out	pla		;Restore registers
 	tay
@@ -226,16 +231,16 @@ out	pla		;Restore registers
 	tax
 	pla
 	cli		;Clear interrupt mask (un-disable)
-	rti		;Return from interrupt handler.
+	rti		;Return from interrupt handler
 fail	ldx #0
-.loop	lda .msg,x
+.loop	lda .msg,x	;Print message notifying user of failure to capture character
 	cmp #0
 	beq out
 	sta iobase
 	inx
 	jmp .loop
 	jmp out
-.msg	.AZ "Failed to save single character"
+.msg	.AZ "Failed to save character"
 
 ;;
 ;;	Intialize interrupt vector.
@@ -412,7 +417,7 @@ rtch	pla		;Pull off pointer return address from stack
 	sta curline
 	lda row1+1,x
 	sta curline+1
-	lda (curline),y	;Load into a the value stored at passed in parameters
+	lda (curline),y	;Load into the register a the value stored at this location
 	pha
 	
 	lda .adrs+1	;Restore pointer return adress to stack
@@ -430,7 +435,15 @@ drwpuck	inc btimer1
 	rts
 .timer	inc btimer2
 	lda btimer2
-	cmp #6
+	ldx pspeed	;Make speed of ball dynamic, depending on ball velocity
+	cpx #1		;Is ball moving 45 degrees? (1 up/down, 1 left/right)
+	beq .one
+	cpx #2		;Is the ball moving 63 degrees? (2 up/down, 1 left/right)
+	beq .two
+.one	cmp #6		;Let the ball move a little faster when it angle is 45 degrees
+	beq .skip
+	rts
+.two	cmp #10		;Let the ball move a little slower when its angle is 63 degrees
 	beq .skip
 	rts
 .skip	lda #0
@@ -444,8 +457,7 @@ drwpuck	inc btimer1
         lda puckcol
 	pha
 	jsr prch	;Call to draw puckcol
-	;Update postion of puckrow and puckcol
-	lda puckdir
+	lda puckdir	;Update postion of puckrow and puckcol
 	cmp #1
 	beq move1
 	cmp #2
@@ -453,31 +465,35 @@ drwpuck	inc btimer1
 	cmp #3
 	beq move3
 	cmp #4
-	beq move4
-
+	beq .move4
+.move4	jmp move4	;Fix out of range error
 ;;
 ;;puckcol--
 ;;puckrow--
 ;;if we hit the left side of the wall, jump to move2 to move the ball up and to the right
 ;;
 move1	ldx puckcol
-	cpx #2
+	cpx #2		;Are we at the left wall?
 	bpl .move11
-;	lda score11	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Do we need this line?
-;	pha
 	ldy #0		;Column value of left paddle
 	jsr collide
 	inc puckdir
 	jmp move2	;if at left wall, start moving in direction 2
 .move11	lda puckrow 
-	cmp #1
+	cmp #1		;Are we at the ceiling?
 	bpl .move12
 	inc puckdir
 	inc puckdir
 	jmp move3	;if at ceiling, start moving in direction 3
 .move12	dec puckcol
-	dec puckrow
-	jmp newpuck
+	ldx #0
+.speed	dec puckrow	;If we hit paddle edge, change velocity to 2 up/down, 1 left/right
+	inx
+	cmp #2		;Are we at the ceiling?
+	bmi .skip	;Stop moving the ball up, as we are already at the ceiling
+	cpx pspeed
+	bmi .speed
+.skip	jmp newpuck
 
 ;;
 ;;puckcol++
@@ -485,23 +501,27 @@ move1	ldx puckcol
 ;;if we hit the right side of the wall, jump to move1 to move the ball up and to the left
 ;;
 move2	ldx puckcol
-	cpx #38
+	cpx #38		;Are we at the right wall?
 	bmi .move21
-;	lda score21
-;	pha
 	ldy #39		;Column value of right paddle
 	jsr collide
 	dec puckdir
 	jmp move1	;if at right wall, start moving in direction 1
 .move21	lda puckrow
-	cmp #1
+	cmp #1		;ARe we at the ceiling?
 	bpl .move22
 	inc puckdir
 	inc puckdir
 	jmp move4	;if at ceiling, start moving in direction 4
 .move22	inc puckcol
-	dec puckrow
-	jmp newpuck
+	ldx #0
+.speed	dec puckrow	;If we hit paddle edge, change velocity to 2 up/down, 1 left/right
+	inx
+	cmp #2		;Are we at the ceiling?
+	bmi .skip	;Stop moving the ball up, as we are already at the ceiling
+	cpx pspeed
+	bmi .speed
+.skip	jmp newpuck
 
 ;;
 ;;puckcol--
@@ -509,23 +529,27 @@ move2	ldx puckcol
 ;;if we hit the right side of the wall, jump to move4 to move the ball down and to the right
 ;;
 move3	ldx puckcol
-	cpx #2
+	cpx #2		;Are we at the left wall?
 	bpl .move31
-;	lda score11
-;	pha
 	ldy #0		;Column value of left paddle
 	jsr collide
 	inc puckdir
 	jmp move4	;if at left wall, start moving in direction 4
 .move31	lda puckrow
-	cmp #23
+	cmp #23		;Are we at the floor?
 	bmi .move32
 	dec puckdir
 	dec puckdir
 	jmp move1	;if at floor, start moving in direction 1
 .move32	dec puckcol
-	inc puckrow
-	jmp newpuck
+	ldx #0
+.speed	inc puckrow	;If we hit paddle edge, change velocity to 2 up/down, 1 left/right
+	inx
+	cmp #22		;Are we at the floor?
+	bpl .skip	;Stop moving the ball down, as we are already at the floor
+	cpx pspeed
+	bmi .speed
+.skip	jmp newpuck
 
 ;;
 ;;puckcol++
@@ -533,24 +557,31 @@ move3	ldx puckcol
 ;;if we hit the right side of the wall, jump to move3 to move the ball down and to the left
 ;;
 move4	ldx puckcol
-	cpx #38
+	cpx #38		;Are we at the right wall?
 	bmi .move41
-;	lda score21
-;	pha
 	ldy #39		;Column value of right paddle
 	jsr collide
 	dec puckdir
 	jmp move3	;if at right wall, start moving in direction 3
 .move41	lda puckrow
-	cmp #23
+	cmp #23		;Are we at the floor?
 	bmi .move42
 	dec puckdir
 	dec puckdir
 	jmp move2	;if at floor, start moving in direction 2
 .move42	inc puckcol
-	inc puckrow
-	jmp newpuck
+	ldx #0
+.speed	inc puckrow	;If we hit paddle edge, change velocity to 2 up/down, 1 left/right
+	inx
+	cmp #22		;Are we at the floor?
+	bpl .skip	;Stop moving the ball down, as we are already at the floor
+	cpx pspeed
+	bmi .speed
+.skip	jmp newpuck
 
+;;
+;;Draw the new position of the puck?
+;;
 newpuck	lda #$FE
 	pha
 	lda puckrow
@@ -572,8 +603,24 @@ collide	lda puckrow
 	pla		;Pull the character returned from rtch
 	cmp #$F6	;Did we hit a paddle?
 	bne score	;If no paddle was hit, then increment appropriate score and reset game
-	rts		;If a paddle was hit, then continue gameplay
-
+	lda puckcol	;Determine which part of paddle was hit to change ball velocity
+	cmp #19		;Which side of the screen is the puck on?
+	bmi .left	;Puck is on the left side of the screen, and player 2 (on the right) won a point
+	jmp .right	;Puck is on the right side of the screen, and player 1 (on the left) won a point
+.left	lda lpaddle
+	jmp .next
+.right	lda rpaddle
+.next	cmp puckrow	;Did we hit the top edge of the paddle?
+	beq .set2	
+	adc #4
+	cmp puckrow	;Did we hit the bottom edge of the paddle?
+	beq .set2
+	lda #1		;Otherwise, we hit somewhere in the middle of the paddle
+	sta pspeed	;Set the paddle velocity to 1
+	rts
+.set2	lda #2
+	sta pspeed	;Set the paddle velocity to 2
+	rts
 ;;
 ;;Determine which player won the point
 ;;
@@ -644,6 +691,8 @@ restart	lda #1		;Set the puck column to 1
 	sta puckrow
 	lda #4
 	sta puckdir	;Set the direction of the puck to 4 (down and to the right)
+	lda #1
+	sta pspeed
 
 ;;
 ;;Wait for user to press space bar to continue game after a point has been scored
@@ -651,14 +700,14 @@ restart	lda #1		;Set the puck column to 1
 	lda #lf
 	sta iobase
 	ldx #0
-.msg2	lda msg2,x
+.msg2	lda msg2,x	;Tell user to press space bar to continue
 	cmp #0
 	beq .next
 	sta iobase
 	inx
 	jmp .msg2
 .next	lda #cr
-	sta iobase
+	sta iobase	;Print new line
 .wait	lda tailptr
 	cmp headptr	;Check pointers.
 	beq .wait	;If equal, buffer is empty.
