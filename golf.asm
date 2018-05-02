@@ -2,8 +2,8 @@
 ; Course:		COMP 252
 ; Instructor:		Dr. Conlon
 ; Date started:		March 20, 2018
-; Last modification:	March 20, 2018
-; Purpose of program:	Clear screen and keyboard input, move puck and paddles
+; Last modification:	May 2, 2018
+; Purpose of program:	Play a fully functional game of Pong
 
 	.CR 6502         ; Assemble 6502
 	.LI on,toff      ; Listing on, no timings included
@@ -32,8 +32,8 @@ rstvecl	= $fffc		;RES (reset) vector:                  fffc-fffd
 rstvech	= rstvecl+1
 irqvecl	= $fffe		;IRQ (interrupt request)      vector: fffe-ffff
 irqvech	= irqvecl+1
-cnrmsg  = 11*40+first+17	;Center message on video screen to print information
-winmsg	= 24*40+first+11	;Starting location for message saying who won the game
+cnrmsg  = 440+first+17	;Center message on video screen to print information (11 * 40 + first + 17)
+winmsg	= 960+first+11	;Starting location for message saying who won the game (24 * 40 + first + 11)
 
 inbuff	.BS $20
 
@@ -85,11 +85,16 @@ row23	.DW $7370
 row24	.DW $7398
 row25	.DW $73C0
 
-msg1	.AZ "Press 'w' or 's' to move the left paddle and 'p' or ';' to move the right paddle21 is the winning score!"
+msg1	.AZ "Press 'w' or 's' to move the left paddle and 'p' or ';' to move the right paddle                        "
 msg2	.AZ "Score!"
 msg3	.AZ "      "
 msg4	.AZ "Left player wins!"
 msg5	.AZ "Right player wins!"
+msg6	.AZ "Select game length: One for 10, two for 21, three for 50, or four for infinity. "
+msg7	.AZ "Game length is 10"
+msg8	.AZ "Game length is 21"
+msg9	.AZ "Game length is 50"
+msg10	.AZ "Game length is infinite"
 
 	.BS $20		;32-byte circular input buffer
 headptr .DB 0		;Initialize buffer offsets to zero
@@ -114,7 +119,8 @@ start	cld
 	iny
 	bne .loop4
 	jsr welcome	;Print to console instructions to user
-	jsr inipad	;Initialize the paddles
+	jsr choose
+cntnue	jsr inipad	;Initialize the paddles
 	jsr initirv	;Initialize ACIA and IRQ vectors.
 	jsr iniscr	;Initilize drawing the scores
 	jmp main	;Then main, waiting for interrupt.
@@ -132,6 +138,100 @@ welcome	lda msg1,x	;Tell users what keys to press to move paddles
 	inx
 	jmp welcome
 .return rts
+
+;;
+;;Let the user choose the length of the game (10, 21, 50, infinite) by printing to the console
+;;
+choose	lda #cr
+	sta iobase
+	lda #lf
+	sta iobase
+	ldx #0
+.loop	lda msg6,x	;Prompt user to select game length
+	beq .getch	;If we have reached the end of the string, then continue with other code
+.wait	lda iostat
+	and #%00010000
+	beq .wait
+	lda msg6,x	;Prompt user to select game length
+	sta iobase
+	inx
+	jmp .loop
+
+.getch	lda tailptr
+	cmp headptr	;Check pointers.
+	beq .getch	;If equal, buffer is empty.
+	tax
+	lda inbuff,x	;Get the character.
+	pha		;Save the character for now
+	inc tailptr	;Increment the offset.
+	lda tailptr
+	and #%00011111	;Clear high 3 bits to make buffer circular.
+	sta tailptr
+	ldx #0		;Used in length subroutines to get character from string
+	pla		;Pull the character
+	cmp #$31	;Did the user press '1'?
+	beq length1
+	cmp #$32	;Did the user press '2'?
+	beq length2
+	cmp #$33	;Did the user press '3'?
+	beq length3
+	cmp #$34	;Did the user press '4'?
+	beq length4
+	jmp .getch	;Otherwise, wait for the user to press a number 1 through 4
+
+
+
+;;
+;;Set game length to 10
+;;
+length1	lda #10
+	sta maxscr
+.loop	lda msg7,x	;Print message notifying user of failure to capture character
+	cmp #0
+	beq .return
+	sta iobase
+	inx
+	jmp .loop
+.return	jmp cntnue
+
+;;
+;;Set game length to 21
+;;
+length2	lda #21
+	sta maxscr
+.loop	lda msg8,x	;Print message notifying user of failure to capture character
+	cmp #0
+	beq .return
+	sta iobase
+	inx
+	jmp .loop
+.return	jmp cntnue
+
+;;
+;;Set game length to 50
+;;
+length3	lda #50
+	sta maxscr
+.loop	lda msg9,x	;Print message notifying user of failure to capture character
+	cmp #0
+	beq .return
+	sta iobase
+	inx
+	jmp .loop
+.return	jmp cntnue
+
+;;
+;;Set game length to infinite
+;;
+length4	lda #100	;99 is used to represent infinity
+	sta maxscr
+.loop	lda msg10,x	;Print message notifying user of failure to capture character
+	cmp #0
+	beq .return
+	sta iobase
+	inx
+	jmp .loop
+.return	jmp cntnue
 
 ;;
 ;;Initialize paddles.
@@ -165,7 +265,7 @@ inipad	clc
 .return	rts
 
 ;;
-;;Initialize scores to 0000 for both users 
+;;Initialize scores to 00 for both users 
 ;;
 iniscr	clc
 	lda #$30	;Initilize the score on the left for player 1 to 0
@@ -190,17 +290,17 @@ iniscr	clc
 	lda .add
 	cmp #2		;Have we drawn both 0's yet?
 	beq .return	;Yes, exit
-	jmp iniscr	;No, go back and draw the next next one
+	jmp iniscr	;No, go back and draw the next one
 .add	.DB 0
 .return	rts
 
 ;;
-;;	Infinite main loop, waiting for interrupt.
+;;Infinite main loop, waiting for interrupt.
 ;;
 main	jsr drwpuck
 
 ;;
-;;	Get one character from the buffer, if there's one there.
+;;Get one character from the buffer, if there's one there.
 ;;
 getch	lda tailptr
 	cmp headptr	;Check pointers.
@@ -251,7 +351,6 @@ fail	ldx #0
 	sta iobase
 	inx
 	jmp .loop
-	jmp out
 .msg	.AZ "Failed to save character"
 
 ;;
@@ -326,7 +425,7 @@ lpadup	ldy lpaddle	;Load the current position of the left paddle
         jsr clrpad	;Clear the bottom part of the paddle
 	dec lpaddle	;Move pointer of paddle position up
 	ldy lpaddle	;Reset y to the new location of the paddle
-	ldx #0		;Column number
+	ldx #0		;Load column number into x
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
@@ -344,7 +443,7 @@ lpaddn	ldy lpaddle	;Load the current position of the left paddle
 	iny
 	iny
 	iny		;Move position of y to bottom of paddle
-	ldx #0		;Column number
+	ldx #0		;Load column number into x
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 
@@ -362,7 +461,7 @@ rpadup	ldy rpaddle	;Load the current position of the right paddle
         jsr clrpad	;Clear the bottom part of the paddle
 	dec rpaddle	;Move pointer of paddle position up
 	ldy rpaddle	;Reset y to the new location of the paddle
-	ldx #39		;Column number
+	ldx #39		;Load column number into x
 	jsr drwpad	;Draw new part of paddle at bottom
         rts
 
@@ -380,7 +479,7 @@ rpaddn	ldy rpaddle	;Load the current position of the right paddle
 	iny
 	iny
 	iny		;Move position of y to bottom of paddle
-	ldx #39		;Column number
+	ldx #39		;Load column number into x
 	jsr drwpad	;Draw new part of paddle at bottom
 	rts
 
@@ -694,7 +793,9 @@ incscr	lda #24		;Score row to a
 ;;
 ;;Check if we hit the max limit of the game length
 ;;
-restart	lda #21
+restart	lda maxscr
+	cmp #99
+	beq .next
 	cmp lscore
 	beq gmeover
 	cmp rscore
@@ -703,7 +804,7 @@ restart	lda #21
 ;;	
 ;;Resets the position of the puck to the top left, its direction to 1, and jumps to main	
 ;;
-	lda #1		;Set the puck column, row, and speed to 1
+.next	lda #1		;Set the puck column, row, and speed to 1
 	sta puckcol
 	sta puckrow
 	sta pspeed
@@ -753,7 +854,7 @@ pause	ldx #0
 ;;
 gmeover	ldx #0
 	ldy #0
-	lda #21
+	lda maxscr
 	cmp lscore
 	beq .lwin
 	jmp .rwin
