@@ -39,14 +39,13 @@ inbuff	.BS $20
 
 irhlo	.DW irq		;Store address of IRQ handler for init.
 curline	.DW 2		;Used for current line where character is being drawn to
-maxscr	.DB 0		;Used to store the game length that the user chose (1 --> 10, 2 --> 21, 3 --> 50, 4 --> infinite)
 lscore	.DW 0		;Left Player's score
 rscore	.DW 0		;Right player's score
 scrcol	.DB 0		;Used as pointer to a given location to assist in rewriting the score
 btimer1	.DB 0		;Timer used to move ball slower
 btimer2	.DB 0		;Timer used to move ball slower
 lpaddle	.DB 5		;Position of top part of left paddle
-rpaddle	.DB 5		;Positio nof top part of right paddle
+rpaddle	.DB 5		;Position of top part of right paddle
 puckrow	.DB 0		;Used to keep track of the puck's row
 puckcol	.DB 0		;Used to keep track of the puck's column
 puckdir	.DB 4		;Set direction to be initially down and to the right
@@ -85,16 +84,11 @@ row23	.DW $7370
 row24	.DW $7398
 row25	.DW $73C0
 
-msg1	.AZ "Press 'w' or 's' to move the left paddle and 'p' or ';' to move the right paddle                        "
+msg1	.AZ "Press 'w' or 's' to move the left paddle and 'p' or ';' to move the right paddle21 is the winning score!"
 msg2	.AZ "Score!"
 msg3	.AZ "      "
-msg4	.AZ "Left player wins!"
-msg5	.AZ "Right player wins!"
-msg6	.AZ "Select game length: One for 10, two for 21, three for 50, or four for infinity. "
-msg7	.AZ "Game length is 10"
-msg8	.AZ "Game length is 21"
-msg9	.AZ "Game length is 50"
-msg10	.AZ "Game length is infinite"
+msg4	.AZ "Left player wins"
+msg5	.AZ "Right player wins"
 
 	.BS $20		;32-byte circular input buffer
 headptr .DB 0		;Initialize buffer offsets to zero
@@ -119,10 +113,9 @@ start	cld
 	iny
 	bne .loop4
 	jsr welcome	;Print to console instructions to user
-	jsr choose
-cntnue	jsr inipad	;Initialize the paddles
+	jsr inipad	;Initialize the paddles
 	jsr initirv	;Initialize ACIA and IRQ vectors.
-	jsr iniscr	;Initilize drawing the scores
+	jsr iniscr	;Initialize drawing the scores
 	jmp main	;Then main, waiting for interrupt.
 
 ;;
@@ -138,100 +131,6 @@ welcome	lda msg1,x	;Tell users what keys to press to move paddles
 	inx
 	jmp welcome
 .return rts
-
-;;
-;;Let the user choose the length of the game (10, 21, 50, infinite) by printing to the console
-;;
-choose	lda #cr
-	sta iobase
-	lda #lf
-	sta iobase
-	ldx #0
-.loop	lda msg6,x	;Prompt user to select game length
-	beq .getch	;If we have reached the end of the string, then continue with other code
-.wait	lda iostat
-	and #%00010000
-	beq .wait
-	lda msg6,x	;Prompt user to select game length
-	sta iobase
-	inx
-	jmp .loop
-
-.getch	lda tailptr
-	cmp headptr	;Check pointers.
-	beq .getch	;If equal, buffer is empty.
-	tax
-	lda inbuff,x	;Get the character.
-	pha		;Save the character for now
-	inc tailptr	;Increment the offset.
-	lda tailptr
-	and #%00011111	;Clear high 3 bits to make buffer circular.
-	sta tailptr
-	ldx #0		;Used in length subroutines to get character from string
-	pla		;Pull the character
-	cmp #$31	;Did the user press '1'?
-	beq length1
-	cmp #$32	;Did the user press '2'?
-	beq length2
-	cmp #$33	;Did the user press '3'?
-	beq length3
-	cmp #$34	;Did the user press '4'?
-	beq length4
-	jmp .getch	;Otherwise, wait for the user to press a number 1 through 4
-
-
-
-;;
-;;Set game length to 10
-;;
-length1	lda #10
-	sta maxscr
-.loop	lda msg7,x	;Print message notifying user of failure to capture character
-	cmp #0
-	beq .return
-	sta iobase
-	inx
-	jmp .loop
-.return	jmp cntnue
-
-;;
-;;Set game length to 21
-;;
-length2	lda #21
-	sta maxscr
-.loop	lda msg8,x	;Print message notifying user of failure to capture character
-	cmp #0
-	beq .return
-	sta iobase
-	inx
-	jmp .loop
-.return	jmp cntnue
-
-;;
-;;Set game length to 50
-;;
-length3	lda #50
-	sta maxscr
-.loop	lda msg9,x	;Print message notifying user of failure to capture character
-	cmp #0
-	beq .return
-	sta iobase
-	inx
-	jmp .loop
-.return	jmp cntnue
-
-;;
-;;Set game length to infinite
-;;
-length4	lda #100	;99 is used to represent infinity
-	sta maxscr
-.loop	lda msg10,x	;Print message notifying user of failure to capture character
-	cmp #0
-	beq .return
-	sta iobase
-	inx
-	jmp .loop
-.return	jmp cntnue
 
 ;;
 ;;Initialize paddles.
@@ -268,7 +167,7 @@ inipad	clc
 ;;Initialize scores to 00 for both users 
 ;;
 iniscr	clc
-	lda #$30	;Initilize the score on the left for player 1 to 0
+	lda #$30	;Initialize the score on the left for player 1 to 0
 	pha
 	lda #24		;Bottom column of video screen
 	pha
@@ -277,7 +176,7 @@ iniscr	clc
 	pha
 	jsr prch	;Draw 0
 
-	lda #$30	;Initilize the score on the right for player 2 to 0
+	lda #$30	;Initialize the score on the right for player 2 to 0
 	pha
 	lda #24		;Bottom column of video screen
 	pha
@@ -354,8 +253,8 @@ fail	ldx #0
 .msg	.AZ "Failed to save character"
 
 ;;
-;;	Intialize interrupt vector.
-;;	This code must follow irq code in assembly-code file.
+;;Initialize interrupt vector.
+;;This code must follow irq code in assembly-code file.
 ;;
 initirv lda #%00001001
 	sta iocmd	;Set command status
@@ -374,7 +273,7 @@ initirv lda #%00001001
 	rts
 
 ;;
-;;Jump to the approrpiate subroutine depending on which charcter the user pressed
+;;Jump to the appropriate subroutine depending on which character the user pressed
 ;;
 prcschr	cmp #'w'
 	beq lpadup	;Move left paddle up
@@ -505,7 +404,7 @@ prch	pla		;Pull off pointer return address from stack
 	pla		;Get character ('*' or ' ', for example)
 	sta (curline),y	;Print character to location on video screen
 
-	lda .adrs+1	;Restore pointer return adress to stack
+	lda .adrs+1	;Restore pointer return address to stack
 	pha
 	lda .adrs
 	pha
@@ -532,9 +431,9 @@ rtch	pla		;Pull off pointer return address from stack
 	lda row1+1,x
 	sta curline+1
 	lda (curline),y	;Load into the register a the character stored at this location
-	pha
+	pha		;Push character to stack
 	
-	lda .adrs+1	;Restore pointer return adress to stack
+	lda .adrs+1	;Restore pointer return address to stack
 	pha
 	lda .adrs
 	pha
@@ -567,14 +466,14 @@ drwpuck	inc btimer1	;Timer to slow down puck movement
 	sta btimer1
 	sta btimer2
 
-	lda #' '
+	lda #' '	;Space to fill old puck
 	pha
 	lda puckrow
         pha
         lda puckcol
 	pha
 	jsr prch	;Call to draw puckcol
-	lda puckdir	;Update postion of puckrow and puckcol
+	lda puckdir	;Update position of puckrow and puckcol
 	cmp #1
 	beq move1
 	cmp #2
@@ -626,7 +525,7 @@ move2	ldx puckcol
 	dec puckdir
 	jmp move1	;if at right wall, start moving in direction 1
 .move21	lda puckrow
-	cmp #1		;ARe we at the ceiling?
+	cmp #1		;Are we at the ceiling?
 	bpl .move22
 	inc puckdir
 	inc puckdir
@@ -700,13 +599,13 @@ move4	ldx puckcol
 ;;
 ;;Draw the new position of the puck?
 ;;
-newpuck	lda #$FE
+newpuck	lda #$FE	;Character for puck
 	pha
 	lda puckrow
         pha
         lda puckcol
 	pha
-	jsr prch		;Call to draw puckcol
+	jsr prch	;Call to draw puckcol
 	rts
 	
 ;;
@@ -721,24 +620,25 @@ collide	lda puckrow
 	pla		;Pull the character returned from rtch
 	cmp #$F6	;Did we hit a paddle?
 	bne score	;If no paddle was hit, then increment appropriate score and reset game
-	lda puckcol	;Determine which part of paddle was hit to change ball velocity
+	lda puckcol	;With successful paddle hit, determine which part of paddle was hit to change ball velocity
 	cmp #19		;Which side of the screen is the puck on?
-	bmi .left	;Puck is on the left side of the screen, and player 2 (on the right) won a point
-	jmp .right	;Puck is on the right side of the screen, and player 1 (on the left) won a point
-.left	lda lpaddle
+	bmi .left	;Puck just hit the left paddle
+	jmp .right	;Puck just hit the right paddle
+.left	lda lpaddle	;Prepare register a with paddle
 	jmp .next
-.right	lda rpaddle
+.right	lda rpaddle	;Prepare register a with paddle
 .next	cmp puckrow	;Did we hit the top edge of the paddle?
-	beq .set2	
-	adc #4
+	beq .set2	;Yes, so change velocity to 2
+	adc #4		;Move to bottom of paddle
 	cmp puckrow	;Did we hit the bottom edge of the paddle?
-	beq .set2
+	beq .set2	;Yes, so change velocity to 2
 	lda #1		;Otherwise, we hit somewhere in the middle of the paddle
 	sta pspeed	;Set the paddle velocity to 1
 	rts
 .set2	lda #2
 	sta pspeed	;Set the paddle velocity to 2
 	rts
+
 ;;
 ;;Determine which player won the point
 ;;
@@ -793,9 +693,7 @@ incscr	lda #24		;Score row to a
 ;;
 ;;Check if we hit the max limit of the game length
 ;;
-restart	lda maxscr
-	cmp #99
-	beq .next
+restart	lda #21
 	cmp lscore
 	beq gmeover
 	cmp rscore
@@ -804,7 +702,7 @@ restart	lda maxscr
 ;;	
 ;;Resets the position of the puck to the top left, its direction to 1, and jumps to main	
 ;;
-.next	lda #1		;Set the puck column, row, and speed to 1
+	lda #1		;Set the puck column, row, and speed to 1
 	sta puckcol
 	sta puckrow
 	sta pspeed
@@ -812,17 +710,20 @@ restart	lda maxscr
 	sta puckdir	;Set the direction of the puck to 4 (down and to the right)
 
 ;;
-;;Print messsage to video screen saying a score has been made
+;;Print message to video screen saying a score has been made
 ;;
-pause	ldx #0
+pause	ldx #0		;Reset x and y to print message
 	ldy #0
-.msg	lda msg2,x	;Print to "score!" to screen
+.msg	lda msg2,x	;Print "Score!" to screen
         beq .timer
         sta cnrmsg,y
         inx		;Increment x
         iny		;Increment y
         jmp .msg	;Loop to print entire message
 
+;;
+;;Pause game to have the word "Score!" stay on the video screen for a brief second
+;;
 .timer	ldx #0
 	ldy #0
 .timer1	cpx #255
@@ -836,9 +737,9 @@ pause	ldx #0
 	jmp .timer1
 
 ;;
-;;Replace message with spaces and jump to the main loop of game again
+;;Replace "Score!" with spaces and jump to the main loop of game again
 ;;
-.next	ldx #0
+.next	ldx #0		;Reset x and y to print message
 	ldy #0
 .space	lda msg3,x	;Get next character to print
         beq .main
@@ -848,26 +749,25 @@ pause	ldx #0
         jmp .space	;Loop to print entire message
 .main	jmp main	;Continue game
 
-
 ;;
 ;;Exit game
 ;;
-gmeover	ldx #0
+gmeover	ldx #0		;Reset x and y to print message
 	ldy #0
-	lda maxscr
-	cmp lscore
+	lda #21
+	cmp lscore	;Determine who won the game
 	beq .lwin
 	jmp .rwin
 .lwin	lda msg4,x	;Print left player won
         beq .break
         sta winmsg,y
-        inx		;Increment x
-        iny		;Increment y
+        inx
+        iny
         jmp .lwin	;Loop to print entire message
-.rwin	lda msg5,x	;Print left player won
+.rwin	lda msg5,x	;Print right player won
         beq .break
         sta winmsg,y
-        inx		;Increment x
-        iny		;Increment y
+        inx
+        iny
         jmp .rwin	;Loop to print entire message
 .break	brk
